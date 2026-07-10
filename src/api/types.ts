@@ -51,7 +51,7 @@ export interface EntityDetailData {
   lat: number
   lng: number
   city: string
-  commodities: { name: string; qty: string; price: string }[]
+  commodities: { name: string; qty: string; price: string; kebutuhanRef?: string | null }[]
   recentTx: { party: string; date: string; qty: string }[]
   addedValue: string[]
 }
@@ -62,6 +62,7 @@ export interface ProducerDashboardData {
   metrics: { label: string; value: string }[]
   recommendations: {
     id: string
+    kebutuhanRef?: string
     type: string
     name: string
     distance: string
@@ -98,7 +99,7 @@ export interface CoopDashboardData {
     matchScore: number
     price: string
   }[]
-  orders: { supplier: string; commodity: string; qty: string; status: string; date: string }[]
+  orders: { id: string; supplier: string; commodity: string; qty: string; status: string; date: string }[]
 }
 
 export interface CitySuggestion {
@@ -106,4 +107,16 @@ export interface CitySuggestion {
   province: string
   lat: number
   lng: number
+}
+
+export interface OfferResponse {
+  id: string
+  producerName: string
+  commodity: string
+  qty: string
+  price: string
+  status: string
+  statusLabel: string
+  date: string
+  note: string | null
 }

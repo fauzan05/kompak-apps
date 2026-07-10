@@ -7,6 +7,7 @@ import {
 } from 'lucide-vue-next'
 import { DEMO_PRODUCER_ID, fetchProducerDashboard } from '@/api/client'
 import type { ProducerDashboardData } from '@/api/types'
+import OfferFormModal, { type OfferFormContext } from '@/components/OfferFormModal.vue'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
@@ -18,6 +19,30 @@ const metrics = ref<{ label: string; value: string; hint: string; icon: typeof P
 const recommendations = ref<ProducerDashboardData['recommendations']>([])
 const products = ref<ProducerDashboardData['products']>([])
 const transactions = ref<ProducerDashboardData['transactions']>([])
+
+const offerOpen = ref(false)
+const offerContext = ref<OfferFormContext | null>(null)
+const offerToast = ref('')
+
+function openOfferForRec(rec: ProducerDashboardData['recommendations'][number]) {
+  const qtyMatch = rec.reason.match(/Membutuhkan (\d+)/)
+  offerContext.value = {
+    arah: 'produsen_ke_koperasi',
+    targetName: rec.name,
+    entitasRef: DEMO_PRODUCER_ID,
+    koperasiRef: rec.id,
+    kebutuhanRef: rec.kebutuhanRef,
+    namaKomoditas: rec.activeNeed,
+    jumlah: qtyMatch?.[1] || '',
+    satuan: 'kg',
+  }
+  offerOpen.value = true
+}
+
+function onOfferSuccess() {
+  offerToast.value = 'Penawaran berhasil dikirim ke koperasi.'
+  window.setTimeout(() => { offerToast.value = '' }, 5000)
+}
 
 onMounted(async () => {
   try {
@@ -148,6 +173,8 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           <span :style="{ fontSize: '12px', color: 'var(--kompak-text-light)' }">{{ m.hint }}</span>
         </div>
       </div>
+
+      <div v-if="offerToast" class="offer-toast">{{ offerToast }}</div>
 
       <div>
         <div
@@ -290,7 +317,7 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
               >
                 Lihat Profil
               </Button>
-              <Button variant="primary" size="small" :style="{ flex: 1 }">
+              <Button variant="primary" size="small" :style="{ flex: 1 }" @click="openOfferForRec(rec)">
                 Ajukan Penawaran
                 <template #iconEnd><ChevronRight :size="14" /></template>
               </Button>
@@ -472,10 +499,24 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
       </div>
     </div>
 
+    <OfferFormModal
+      :open="offerOpen"
+      :context="offerContext"
+      @close="offerOpen = false"
+      @success="onOfferSuccess"
+    />
   </div>
 </template>
 
 <style>
+.offer-toast {
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  background: var(--kompak-verified-bg);
+  color: var(--kompak-verified);
+  font-size: 13px;
+  font-weight: 600;
+}
 @media (max-width: 760px) {
   .metric-row { grid-template-columns: 1fr !important; }
   .two-col { grid-template-columns: 1fr !important; }

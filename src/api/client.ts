@@ -5,6 +5,7 @@ import type {
   KomoditasItem,
   LandingStat,
   MapPin,
+  OfferResponse,
   ProducerCard,
   ProducerDashboardData,
 } from './types'
@@ -20,6 +21,19 @@ async function getJson<T>(path: string): Promise<T> {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `API ${path} gagal (${res.status})`)
+  }
+  return res.json() as Promise<T>
+}
+
+async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -87,4 +101,39 @@ export function submitProduct(payload: {
   entitasRef?: string
 }) {
   return postJson<{ ok: boolean; entitasRef: string; penawaranRef: string }>('/products', payload)
+}
+
+export function submitOffer(payload: {
+  arah: 'produsen_ke_koperasi' | 'koperasi_ke_produsen'
+  entitasRef?: string
+  koperasiRef?: string
+  kebutuhanRef?: string
+  namaKomoditas: string
+  jumlah: number
+  satuan?: string
+  harga?: number
+  catatan?: string
+}) {
+  return postJson<{ ok: boolean; responRef: string }>('/offers', payload)
+}
+
+export function fetchOffers(params: { kebutuhanRef?: string; koperasiRef?: string }) {
+  const qs = new URLSearchParams()
+  if (params.kebutuhanRef) qs.set('kebutuhanRef', params.kebutuhanRef)
+  if (params.koperasiRef) qs.set('koperasiRef', params.koperasiRef)
+  return getJson<{ offers: OfferResponse[] }>(`/offers?${qs}`).then((r) => r.offers)
+}
+
+export function scheduleOrder(payload: {
+  entitasRef: string
+  koperasiRef?: string
+  namaKomoditas: string
+  jumlah: number
+  nilai?: number
+}) {
+  return postJson<{ ok: boolean; transaksiRef: string }>('/orders', payload)
+}
+
+export function updateOrderStatus(id: string, status: 'dalam-perjalanan' | 'selesai') {
+  return patchJson<{ ok: boolean; transaksiRef: string; status: string }>(`/orders/${id}`, { status })
 }

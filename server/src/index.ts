@@ -9,6 +9,8 @@ import { mapRoute } from './routes/map.js'
 import { entitiesRoute } from './routes/entities.js'
 import { dashboardRoute } from './routes/dashboard.js'
 import { productsRoute } from './routes/products.js'
+import { offersRoute } from './routes/offers.js'
+import { ordersRoute } from './routes/orders.js'
 
 config({ path: resolve(process.cwd(), '../.env') })
 config()
@@ -25,6 +27,8 @@ app.route('/api/map', mapRoute)
 app.route('/api/entities', entitiesRoute)
 app.route('/api/dashboard', dashboardRoute)
 app.route('/api/products', productsRoute)
+app.route('/api/offers', offersRoute)
+app.route('/api/orders', ordersRoute)
 
 const port = Number(process.env.API_PORT || 3001)
 

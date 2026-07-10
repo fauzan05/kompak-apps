@@ -45,18 +45,20 @@ entitiesRoute.get('/:type/:id', async (c) => {
     `
     if (!row) return c.json({ error: 'Entitas tidak ditemukan' }, 404)
 
-    const products = await sql<{ name: string; qty: string; price: string }[]>`
+    const products = await sql<{ name: string; qty: string; price: string; kebutuhanRef: string | null }[]>`
       SELECT
         kb.nama_komoditas AS name,
         'Butuh ' || kb.jumlah::text || ' ' || kb.satuan AS qty,
-        'Penawaran terbuka' AS price
+        'Penawaran terbuka' AS price,
+        kb.kebutuhan_ref AS "kebutuhanRef"
       FROM kebutuhan_koperasi kb
       WHERE kb.koperasi_ref = ${id} AND kb.status = 'aktif'
       UNION ALL
       SELECT
         pr.nama_produk AS name,
         coalesce(inv.stok::text, '0') || ' ' || coalesce(pr.unit, 'unit') AS qty,
-        'Stok koperasi' AS price
+        'Stok koperasi' AS price,
+        NULL::text AS "kebutuhanRef"
       FROM produk_koperasi pr
       LEFT JOIN inventaris_produk inv ON inv.produk_sample_id = pr.produk_sample_id
       WHERE pr.koperasi_ref = ${id}

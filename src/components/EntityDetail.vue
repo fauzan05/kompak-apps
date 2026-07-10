@@ -3,8 +3,9 @@ import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vu
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Button } from '@/components/ui'
-import { fetchEntity } from '@/api/client'
+import { DEMO_COOP_ID, DEMO_PRODUCER_ID, fetchEntity } from '@/api/client'
 import type { EntityDetailData } from '@/api/types'
+import OfferFormModal, { type OfferFormContext } from '@/components/OfferFormModal.vue'
 import {
   Sprout, Store, Users, MapPin, ShieldCheck, AlertCircle, Phone, ChevronLeft,
   Handshake, Zap, TrendingUp, Star, Clock, Package, MessageCircle, Calendar, Leaf,
@@ -61,6 +62,66 @@ function photoFor(name: string): string {
 const detail = ref<EntityDetailData | null>(null)
 const loading = ref(false)
 const loadError = ref('')
+const offerOpen = ref(false)
+const offerContext = ref<OfferFormContext | null>(null)
+const offerToast = ref('')
+
+interface ProductItem {
+  name: string
+  qty: string
+  price: string
+  kebutuhanRef?: string | null
+}
+
+function parseQty(str: string): { jumlah: string; satuan: string } {
+  const m = str.match(/(\d+)\s*(\w+)?/)
+  return { jumlah: m?.[1] || '', satuan: m?.[2] || 'kg' }
+}
+
+function parsePrice(str: string): string {
+  const m = str.match(/[\d.]+/)
+  return m ? m[0].replace(/\./g, '') : ''
+}
+
+function openOffer(product?: ProductItem) {
+  const entityId = props.entity?.id || detail.value?.id
+  if (!entityId) return
+  const entityName = name.value
+  const targetProduct = product || products.value[0]
+  const parsed = targetProduct ? parseQty(targetProduct.qty) : { jumlah: '', satuan: 'kg' }
+
+  if (isKoperasi.value) {
+    offerContext.value = {
+      arah: 'produsen_ke_koperasi',
+      targetName: entityName,
+      entitasRef: DEMO_PRODUCER_ID,
+      koperasiRef: entityId,
+      kebutuhanRef: targetProduct?.kebutuhanRef || undefined,
+      namaKomoditas: targetProduct?.name || '',
+      jumlah: parsed.jumlah,
+      satuan: parsed.satuan,
+    }
+  } else {
+    offerContext.value = {
+      arah: 'koperasi_ke_produsen',
+      targetName: entityName,
+      entitasRef: entityId,
+      koperasiRef: DEMO_COOP_ID,
+      namaKomoditas: targetProduct?.name || '',
+      jumlah: parsed.jumlah,
+      satuan: parsed.satuan,
+      harga: targetProduct ? parsePrice(targetProduct.price) : '',
+    }
+  }
+  offerOpen.value = true
+}
+
+function onOfferSuccess() {
+  offerToast.value = isKoperasi.value
+    ? 'Penawaran pasokan berhasil dikirim ke koperasi.'
+    : 'Tawaran pembelian berhasil dikirim ke produsen.'
+  window.setTimeout(() => { offerToast.value = '' }, 5000)
+}
 
 async function loadDetail() {
   const id = props.entity?.id
@@ -138,7 +199,7 @@ const location = computed(() => detail.value?.location || (props.entity?.city ? 
 const distance = computed(() => props.entity?.distance || '—')
 const verified = computed(() => detail.value?.verified ?? props.entity?.verified ?? true)
 
-const products = computed(() => {
+const products = computed<ProductItem[]>(() => {
   if (detail.value?.commodities?.length) return detail.value.commodities
   if (props.entity?.commodities?.length) {
     return props.entity.commodities.map((c) => ({
@@ -291,12 +352,14 @@ function onGalleryLeave(e: Event) {
           <template #iconStart><Phone :size="15" /></template>
           Hubungi
         </Button>
-        <Button variant="primary" size="small" :style="{ background: 'var(--kompak-accent)' }">
+        <Button variant="primary" size="small" :style="{ background: 'var(--kompak-accent)' }" @click="openOffer()">
           <template #iconStart><Handshake :size="15" /></template>
-          Ajukan Penawaran
+          {{ isKoperasi ? 'Tawarkan Pasokan' : 'Ajukan Penawaran' }}
         </Button>
       </div>
     </div>
+
+    <div v-if="offerToast" class="offer-toast">{{ offerToast }}</div>
 
     <!-- BODY GRID -->
     <div class="detail-grid" :style="{ maxWidth: '1100px', margin: '0 auto', padding: 'var(--space-2xl)', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 'var(--space-2xl)', alignItems: 'start' }">
@@ -324,7 +387,7 @@ function onGalleryLeave(e: Event) {
                     <Package :size="12" /> {{ p.qty }}
                   </div>
                 </div>
-                <Button variant="neutral" size="small" :style="{ width: '100%' }">
+                <Button variant="neutral" size="small" :style="{ width: '100%' }" @click="openOffer(p)">
                   {{ isKoperasi ? 'Tawarkan Pasokan' : 'Ajukan Penawaran' }}
                 </Button>
               </div>
@@ -438,9 +501,9 @@ function onGalleryLeave(e: Event) {
             </div>
           </div>
           <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', marginTop: 'var(--space-lg)' }">
-            <Button variant="primary" :style="{ width: '100%', background: 'var(--kompak-accent)' }">
+            <Button variant="primary" :style="{ width: '100%', background: 'var(--kompak-accent)' }" @click="openOffer()">
               <template #iconStart><Handshake :size="15" /></template>
-              Ajukan Penawaran
+              {{ isKoperasi ? 'Tawarkan Pasokan' : 'Ajukan Penawaran' }}
             </Button>
             <Button variant="neutral" :style="{ width: '100%' }">
               <template #iconStart><MessageCircle :size="15" /></template>
@@ -467,10 +530,25 @@ function onGalleryLeave(e: Event) {
         </div>
       </div>
     </div>
+
+    <OfferFormModal
+      :open="offerOpen"
+      :context="offerContext"
+      @close="offerOpen = false"
+      @success="onOfferSuccess"
+    />
   </div>
 </template>
 
 <style scoped>
+.offer-toast {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-2xl);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kompak-verified);
+}
 @media (max-width: 900px) {
   .detail-grid {
     grid-template-columns: 1fr !important;

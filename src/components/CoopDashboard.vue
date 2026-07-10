@@ -5,8 +5,8 @@ import {
   Sprout, Users, MapPin, Plus, Bell, Clock, ChevronRight, Package, Truck,
   CheckCircle, AlertCircle, Filter, Handshake, Search,
 } from 'lucide-vue-next'
-import { DEMO_COOP_ID, fetchCoopDashboard } from '@/api/client'
-import type { CoopDashboardData } from '@/api/types'
+import { DEMO_COOP_ID, fetchCoopDashboard, fetchOffers, scheduleOrder, updateOrderStatus } from '@/api/client'
+import type { CoopDashboardData, OfferResponse } from '@/api/types'
 import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
@@ -23,6 +23,9 @@ const loading = ref(true)
 const pasokanLoading = ref(false)
 const loadError = ref('')
 const pickupMessage = ref('')
+const orderMessage = ref('')
+const schedulingPickup = ref('')
+const updatingOrderId = ref('')
 const title = ref('Dashboard Koperasi')
 const location = ref('—')
 const stats = ref<{ label: string; value: string; icon: Component; color: string }[]>([])
@@ -101,13 +104,78 @@ function applyFilters() {
   loadDashboard(true)
 }
 
-function schedulePickup(p: CoopDashboardData['producers'][number]) {
+function parseQtyKg(qty: string): number {
+  const m = qty.match(/(\d+)/)
+  return m ? Number(m[1]) : 0
+}
+
+function parsePriceNumber(price: string): number | undefined {
+  const m = price.match(/[\d.]+/)
+  if (!m) return undefined
+  const n = Number(m[0].replace(/\./g, ''))
+  return Number.isFinite(n) ? n : undefined
+}
+
+async function schedulePickup(p: CoopDashboardData['producers'][number]) {
   const ok = window.confirm(
     `Jadwalkan pickup dari ${p.name}?\n\nKomoditas: ${p.commodity}\nStok: ${p.qty}\nJarak: ${p.distance}`,
   )
-  if (ok) {
-    pickupMessage.value = `Permintaan pickup ke ${p.name} telah dicatat. Tim koperasi akan menghubungi produsen.`
+  if (!ok) return
+
+  const jumlah = parseQtyKg(p.qty)
+  if (!jumlah) {
+    pickupMessage.value = 'Jumlah stok tidak valid untuk dijadwalkan.'
     window.setTimeout(() => { pickupMessage.value = '' }, 5000)
+    return
+  }
+
+  schedulingPickup.value = p.id
+  try {
+    await scheduleOrder({
+      entitasRef: p.id,
+      koperasiRef: DEMO_COOP_ID,
+      namaKomoditas: p.commodity,
+      jumlah,
+      nilai: parsePriceNumber(p.price),
+    })
+    pickupMessage.value = `Pickup dari ${p.name} berhasil dijadwalkan. Lihat di tab Pelacakan Pesanan.`
+    await loadDashboard(true)
+  } catch (e) {
+    pickupMessage.value = e instanceof Error ? e.message : 'Gagal menjadwalkan pickup'
+  } finally {
+    schedulingPickup.value = ''
+    window.setTimeout(() => { pickupMessage.value = '' }, 5000)
+  }
+}
+
+function nextOrderStatus(status: string): 'dalam-perjalanan' | 'selesai' | null {
+  if (status === 'dijadwalkan') return 'dalam-perjalanan'
+  if (status === 'dalam-perjalanan') return 'selesai'
+  return null
+}
+
+function nextOrderActionLabel(status: string): string | null {
+  if (status === 'dijadwalkan') return 'Mulai Pengiriman'
+  if (status === 'dalam-perjalanan') return 'Tandai Selesai'
+  return null
+}
+
+async function advanceOrder(order: CoopDashboardData['orders'][number]) {
+  const next = nextOrderStatus(order.status)
+  if (!next) return
+
+  updatingOrderId.value = order.id
+  try {
+    await updateOrderStatus(order.id, next)
+    orderMessage.value = next === 'dalam-perjalanan'
+      ? 'Pesanan sedang dalam perjalanan.'
+      : 'Pesanan telah selesai.'
+    await loadDashboard()
+  } catch (e) {
+    orderMessage.value = e instanceof Error ? e.message : 'Gagal memperbarui status pesanan'
+  } finally {
+    updatingOrderId.value = ''
+    window.setTimeout(() => { orderMessage.value = '' }, 5000)
   }
 }
 
@@ -126,9 +194,31 @@ const tabs = [
 ]
 
 const needsList = ref<CoopDashboardData['activeNeeds']>([])
+const expandedNeedId = ref<string | null>(null)
+const responsesByNeed = ref<Record<string, OfferResponse[]>>({})
+const responsesLoading = ref('')
 
 function closeNeed(id: string) {
   needsList.value = needsList.value.filter((n) => n.id !== id)
+  if (expandedNeedId.value === id) expandedNeedId.value = null
+}
+
+async function toggleResponses(needId: string) {
+  if (expandedNeedId.value === needId) {
+    expandedNeedId.value = null
+    return
+  }
+  expandedNeedId.value = needId
+  if (!responsesByNeed.value[needId]) {
+    responsesLoading.value = needId
+    try {
+      responsesByNeed.value[needId] = await fetchOffers({ kebutuhanRef: needId })
+    } catch {
+      responsesByNeed.value[needId] = []
+    } finally {
+      responsesLoading.value = ''
+    }
+  }
 }
 
 function needMeta(need: CoopDashboardData['activeNeeds'][number]) {
@@ -228,10 +318,83 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
 
                 <div :style="{ display: 'flex', gap: 'var(--space-md)' }">
                   <Button variant="neutral" size="small" :style="{ flex: 1 }" @click="closeNeed(need.id)">Tutup Pengumuman</Button>
-                  <Button variant="primary" size="small" :style="{ flex: 1 }">
-                    Lihat Respons
+                  <Button variant="primary" size="small" :style="{ flex: 1 }" @click="toggleResponses(need.id)">
+                    {{ expandedNeedId === need.id ? 'Sembunyikan' : 'Lihat Respons' }}
                     <template #iconEnd><ChevronRight :size="14" /></template>
                   </Button>
+                </div>
+
+                <div
+                  v-if="expandedNeedId === need.id"
+                  :style="{
+                    marginTop: 'var(--space-md)',
+                    padding: 'var(--space-lg)',
+                    background: 'var(--kompak-card-bg)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--kompak-border)',
+                  }"
+                >
+                  <div v-if="responsesLoading === need.id" :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">
+                    Memuat respons…
+                  </div>
+                  <div
+                    v-else-if="!(responsesByNeed[need.id]?.length)"
+                    :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)', textAlign: 'center', padding: 'var(--space-md)' }"
+                  >
+                    Belum ada respons dari produsen.
+                  </div>
+                  <div v-else :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
+                    <div
+                      v-for="resp in responsesByNeed[need.id]"
+                      :key="resp.id"
+                      :style="{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 'var(--space-md)',
+                        padding: 'var(--space-md)',
+                        background: 'var(--kompak-surface-white)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--kompak-border)',
+                      }"
+                    >
+                      <div
+                        :style="{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 'var(--radius-md)',
+                          background: 'var(--kompak-verified-bg)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }"
+                      >
+                        <Sprout :size="18" color="var(--kompak-verified)" />
+                      </div>
+                      <div :style="{ flex: 1, minWidth: 0 }">
+                        <div :style="{ fontSize: '14px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ resp.producerName }}</div>
+                        <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">
+                          {{ resp.commodity }} · {{ resp.qty }} · {{ resp.price }}
+                        </div>
+                        <div v-if="resp.note" :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 4, fontStyle: 'italic' }">
+                          "{{ resp.note }}"
+                        </div>
+                      </div>
+                      <div :style="{ textAlign: 'right', flexShrink: 0 }">
+                        <span
+                          :style="{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            color: 'var(--kompak-primary)',
+                            background: 'rgba(15, 89, 94, 0.1)',
+                            padding: '2px 8px',
+                            borderRadius: 'var(--radius-full)',
+                          }"
+                        >{{ resp.statusLabel }}</span>
+                        <div :style="{ fontSize: '11px', color: 'var(--kompak-text-light)', marginTop: 4 }">{{ resp.date }}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -361,8 +524,8 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                 </div>
                 <div :style="{ display: 'flex', gap: 'var(--space-md)' }">
                   <Button variant="neutral" size="small" :style="{ flex: 1 }" @click="emit('navigate', 'entity-detail', { type: p.type, id: p.id, name: p.name })">Lihat Etalase</Button>
-                  <Button variant="primary" size="small" :style="{ flex: 1 }" @click="schedulePickup(p)">
-                    Jadwalkan Pickup
+                  <Button variant="primary" size="small" :style="{ flex: 1 }" :disabled="schedulingPickup === p.id" @click="schedulePickup(p)">
+                    {{ schedulingPickup === p.id ? 'Menjadwalkan…' : 'Jadwalkan Pickup' }}
                     <template #iconEnd><Truck :size="14" /></template>
                   </Button>
                 </div>
@@ -371,22 +534,47 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
 
             <!-- Pelacakan Pesanan -->
             <div v-else-if="active === 'pesanan'" :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
+              <div v-if="orderMessage" class="pickup-toast">{{ orderMessage }}</div>
+
               <div
-                v-for="(order, i) in orders"
-                :key="`${order.supplier}-${order.date}-${i}`"
-                :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', padding: 'var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)' }"
+                v-if="orders.length === 0"
+                :style="{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-lg)', padding: 'var(--space-2xl)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', textAlign: 'center' }"
               >
-                <div :style="{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }">
-                  <component :is="(orderStatusConfig[order.status] || orderStatusConfig.diproses).icon" :size="20" :color="(orderStatusConfig[order.status] || orderStatusConfig.diproses).color" />
+                <Truck :size="32" color="var(--kompak-text-muted)" />
+                <div :style="{ fontSize: '15px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">Belum ada pesanan pickup</div>
+                <div :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)', maxWidth: '320px' }">
+                  Jadwalkan pickup dari produsen terdekat di tab Cari Pasokan untuk mulai melacak pengiriman.
                 </div>
-                <div :style="{ flex: 1, minWidth: 0 }">
-                  <div :style="{ fontSize: '14px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ order.supplier }}</div>
-                  <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ order.commodity }} · {{ order.qty }}</div>
+              </div>
+
+              <div
+                v-for="order in orders"
+                :key="order.id"
+                :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', padding: 'var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)' }"
+              >
+                <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)' }">
+                  <div :style="{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }">
+                    <component :is="(orderStatusConfig[order.status] || orderStatusConfig.diproses).icon" :size="20" :color="(orderStatusConfig[order.status] || orderStatusConfig.diproses).color" />
+                  </div>
+                  <div :style="{ flex: 1, minWidth: 0 }">
+                    <div :style="{ fontSize: '14px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ order.supplier }}</div>
+                    <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ order.commodity }} · {{ order.qty }}</div>
+                  </div>
+                  <div :style="{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-xs)' }">
+                    <span :style="{ padding: '2px 8px', borderRadius: 'var(--radius-full)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, color: (orderStatusConfig[order.status] || orderStatusConfig.diproses).color, fontSize: '11px', fontWeight: 600 }">{{ (orderStatusConfig[order.status] || orderStatusConfig.diproses).label }}</span>
+                    <span :style="{ fontSize: '11px', color: 'var(--kompak-text-light)' }">{{ order.date }}</span>
+                  </div>
                 </div>
-                <div :style="{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-xs)' }">
-                  <span :style="{ padding: '2px 8px', borderRadius: 'var(--radius-full)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, color: (orderStatusConfig[order.status] || orderStatusConfig.diproses).color, fontSize: '11px', fontWeight: 600 }">{{ (orderStatusConfig[order.status] || orderStatusConfig.diproses).label }}</span>
-                  <span :style="{ fontSize: '11px', color: 'var(--kompak-text-light)' }">{{ order.date }}</span>
-                </div>
+                <Button
+                  v-if="nextOrderActionLabel(order.status)"
+                  variant="primary"
+                  size="small"
+                  :style="{ alignSelf: 'flex-start' }"
+                  :disabled="updatingOrderId === order.id"
+                  @click="advanceOrder(order)"
+                >
+                  {{ updatingOrderId === order.id ? 'Memperbarui…' : nextOrderActionLabel(order.status) }}
+                </Button>
               </div>
             </div>
           </div>

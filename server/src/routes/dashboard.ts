@@ -55,6 +55,7 @@ dashboardRoute.get('/producer/:id', async (c) => {
   const commodityNames = offers.map((o) => o.nama_komoditas)
 
   const needs = await sql<{
+    kebutuhan_ref: string
     koperasi_ref: string
     nama_koperasi: string
     nama_komoditas: string
@@ -62,7 +63,7 @@ dashboardRoute.get('/producer/:id', async (c) => {
     coords: string
     verified: boolean
   }[]>`
-    SELECT kb.koperasi_ref, p.nama_koperasi, kb.nama_komoditas, kb.jumlah,
+    SELECT kb.kebutuhan_ref, kb.koperasi_ref, p.nama_koperasi, kb.nama_komoditas, kb.jumlah,
       p.koordinat_dibulatkan AS coords, (p.status_registrasi = 'Approved') AS verified
     FROM kebutuhan_koperasi kb
     JOIN profil_koperasi p ON p.koperasi_ref = kb.koperasi_ref
@@ -78,6 +79,7 @@ dashboardRoute.get('/producer/:id', async (c) => {
     const matchScore = Math.max(60, 100 - Math.round(km))
     return {
       id: n.koperasi_ref,
+      kebutuhanRef: n.kebutuhan_ref,
       type: 'koperasi',
       name: n.nama_koperasi,
       distance: formatDistance(km),
@@ -141,9 +143,9 @@ dashboardRoute.get('/coop/:id', async (c) => {
   const [counts] = await sql<{ needs: number; orders: number; producers: number; tx: number }[]>`
     SELECT
       (SELECT count(*)::int FROM kebutuhan_koperasi WHERE koperasi_ref = ${id} AND status = 'aktif') AS needs,
-      (SELECT count(*)::int FROM transaksi_penjualan WHERE koperasi_ref = ${id}) AS orders,
+      (SELECT count(*)::int FROM transaksi_kompak WHERE koperasi_ref = ${id} AND status IN ('dijadwalkan', 'dalam-perjalanan')) AS orders,
       (SELECT count(*)::int FROM entitas_komoditas) AS producers,
-      (SELECT count(*)::int FROM transaksi_kompak WHERE koperasi_ref = ${id}) AS tx
+      (SELECT count(*)::int FROM transaksi_kompak WHERE koperasi_ref = ${id} AND status = 'selesai' AND tanggal >= date_trunc('month', current_date)) AS tx
   `
 
   const activeNeeds = await sql<{
@@ -249,9 +251,9 @@ dashboardRoute.get('/coop/:id', async (c) => {
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 12)
 
-  const orders = await sql<{ supplier: string; commodity: string; qty: string; status: string; date: string }[]>`
-  (
+  const orders = await sql<{ id: string; supplier: string; commodity: string; qty: string; status: string; date: string }[]>`
     SELECT
+      tk.transaksi_ref AS id,
       coalesce(e.nama, 'Pemasok') AS supplier,
       tk.nama_komoditas AS commodity,
       tk.jumlah::text || ' kg' AS qty,
@@ -260,20 +262,8 @@ dashboardRoute.get('/coop/:id', async (c) => {
     FROM transaksi_kompak tk
     LEFT JOIN entitas_komoditas e ON e.entitas_ref = tk.entitas_ref
     WHERE tk.koperasi_ref = ${id}
-  )
-  UNION ALL
-  (
-    SELECT
-      coalesce(t.nama_pelanggan, 'Pelanggan') AS supplier,
-      'Penjualan' AS commodity,
-      t.total_pembayaran::text AS qty,
-      coalesce(t.status_transaksi, 'Selesai') AS status,
-      to_char(t.tanggal_dibuat, 'DD Mon YYYY') AS date
-    FROM transaksi_penjualan t
-    WHERE t.koperasi_ref = ${id}
-  )
-  ORDER BY date DESC NULLS LAST
-  LIMIT 8
+    ORDER BY tk.tanggal DESC NULLS LAST, tk.dibuat_pada DESC NULLS LAST
+    LIMIT 20
   `
 
   return c.json({
@@ -281,9 +271,9 @@ dashboardRoute.get('/coop/:id', async (c) => {
     location: coop.location,
     stats: [
       { label: 'Kebutuhan Aktif', value: String(counts.needs) },
-      { label: 'Pesanan', value: String(counts.orders) },
+      { label: 'Pesanan Berjalan', value: String(counts.orders) },
       { label: 'Produsen Terdekat', value: String(producersMapped.length) },
-      { label: 'Transaksi', value: String(counts.tx + counts.orders) },
+      { label: 'Transaksi Bulan Ini', value: String(counts.tx) },
     ],
     activeNeeds,
     producers: producersMapped,
