@@ -17,7 +17,8 @@ Semua warna, spacing, radius, shadow dari `src/styles/globals.css`:
 - Spacing: `--space-xs` … `--space-2xl`
 - Radius: `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-full`
 - Shadow: `--shadow-card`, `--shadow-elevated`
-- Font: `--font-body`, `--font-heading`
+- Font: `--font-body` (Inter, default seluruh app), `--font-heading` (Playfair, brand KOMPAK + hero/judul section di Beranda saja) — `src/styles/fonts.css`
+- Jangan pakai `--font-heading` untuk angka statistik, rating, label kartu, atau judul di dalam app (dashboard, map, detail)
 
 Jangan hardcode hex brand baru tanpa menambah token di globals.css.
 

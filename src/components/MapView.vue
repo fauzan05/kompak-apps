@@ -10,6 +10,9 @@ import {
   Navigation, ShieldCheck, AlertCircle, Layers,
 } from 'lucide-vue-next'
 
+import { fetchCities, fetchMapPins } from '@/api/client'
+import type { CitySuggestion } from '@/api/types'
+
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
 const commodityFilters = [
@@ -27,69 +30,10 @@ const radiusOptions = ['5 km', '10 km', '25 km', '50 km']
 const USER_LOCATION: [number, number] = [-6.85, 107.0]
 
 interface City { name: string; province: string; lat: number; lng: number }
-const cities: City[] = [
-  { name: 'Banda Aceh', province: 'Aceh', lat: 5.55, lng: 95.32 },
-  { name: 'Medan', province: 'Sumatra Utara', lat: 3.59, lng: 98.67 },
-  { name: 'Padang', province: 'Sumatra Barat', lat: -0.95, lng: 100.35 },
-  { name: 'Pekanbaru', province: 'Riau', lat: 0.51, lng: 101.44 },
-  { name: 'Jambi', province: 'Jambi', lat: -1.61, lng: 103.61 },
-  { name: 'Palembang', province: 'Sumatra Selatan', lat: -2.99, lng: 104.76 },
-  { name: 'Bengkulu', province: 'Bengkulu', lat: -3.80, lng: 102.26 },
-  { name: 'Bandar Lampung', province: 'Lampung', lat: -5.43, lng: 105.26 },
-  { name: 'Jakarta', province: 'DKI Jakarta', lat: -6.21, lng: 106.85 },
-  { name: 'Bogor', province: 'Jawa Barat', lat: -6.60, lng: 106.80 },
-  { name: 'Sukabumi', province: 'Jawa Barat', lat: -6.92, lng: 106.93 },
-  { name: 'Bandung', province: 'Jawa Barat', lat: -6.92, lng: 107.61 },
-  { name: 'Cirebon', province: 'Jawa Barat', lat: -6.73, lng: 108.55 },
-  { name: 'Tasikmalaya', province: 'Jawa Barat', lat: -7.33, lng: 108.22 },
-  { name: 'Semarang', province: 'Jawa Tengah', lat: -6.97, lng: 110.42 },
-  { name: 'Solo', province: 'Jawa Tengah', lat: -7.57, lng: 110.83 },
-  { name: 'Yogyakarta', province: 'DI Yogyakarta', lat: -7.80, lng: 110.36 },
-  { name: 'Surabaya', province: 'Jawa Timur', lat: -7.26, lng: 112.75 },
-  { name: 'Malang', province: 'Jawa Timur', lat: -7.98, lng: 112.63 },
-  { name: 'Kediri', province: 'Jawa Timur', lat: -7.82, lng: 112.01 },
-  { name: 'Jember', province: 'Jawa Timur', lat: -8.17, lng: 113.70 },
-  { name: 'Denpasar', province: 'Bali', lat: -8.65, lng: 115.22 },
-  { name: 'Mataram', province: 'NTB', lat: -8.58, lng: 116.12 },
-  { name: 'Kupang', province: 'NTT', lat: -10.18, lng: 123.61 },
-  { name: 'Pontianak', province: 'Kalimantan Barat', lat: -0.02, lng: 109.34 },
-  { name: 'Palangkaraya', province: 'Kalimantan Tengah', lat: -2.21, lng: 113.92 },
-  { name: 'Banjarmasin', province: 'Kalimantan Selatan', lat: -3.32, lng: 114.59 },
-  { name: 'Samarinda', province: 'Kalimantan Timur', lat: -0.50, lng: 117.15 },
-  { name: 'Balikpapan', province: 'Kalimantan Timur', lat: -1.24, lng: 116.85 },
-  { name: 'Makassar', province: 'Sulawesi Selatan', lat: -5.15, lng: 119.42 },
-  { name: 'Palu', province: 'Sulawesi Tengah', lat: -0.90, lng: 119.87 },
-  { name: 'Kendari', province: 'Sulawesi Tenggara', lat: -3.99, lng: 122.51 },
-  { name: 'Manado', province: 'Sulawesi Utara', lat: 1.47, lng: 124.84 },
-  { name: 'Gorontalo', province: 'Gorontalo', lat: 0.54, lng: 123.06 },
-  { name: 'Ambon', province: 'Maluku', lat: -3.70, lng: 128.18 },
-  { name: 'Ternate', province: 'Maluku Utara', lat: 0.79, lng: 127.38 },
-  { name: 'Sorong', province: 'Papua Barat Daya', lat: -0.88, lng: 131.25 },
-  { name: 'Manokwari', province: 'Papua Barat', lat: -0.86, lng: 134.06 },
-  { name: 'Jayapura', province: 'Papua', lat: -2.53, lng: 140.72 },
-]
 
-const COMMODITY_POOL = [
-  'Gula Aren', 'Kopi Robusta', 'Kopi Arabika', 'Beras Organik', 'Sayuran',
-  'Buah-buahan', 'Madu Hutan', 'Ikan', 'Rumput Laut', 'Sagu', 'Kelapa',
-  'Cengkeh', 'Pala', 'Kakao', 'Vanili', 'Jagung',
-]
-const PRODUCER_NAMES = ['Pak Budi', 'Bu Sari', 'Pak Ahmad', 'Bu Ketut', 'Pak Yohanes', 'Pak Rahman', 'Bu Wayan', 'Pak Joko', 'Bu Ani', 'Pak Made']
-
-function hashStr(s: string): number {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
-  return h >>> 0
-}
-
-function haversineKm(a: [number, number], b: [number, number]) {
-  const R = 6371
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dLat = toRad(b[0] - a[0])
-  const dLng = toRad(b[1] - a[1])
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2
-  return Math.round(2 * R * Math.asin(Math.sqrt(x)))
-}
+const cities = ref<City[]>([])
+const pinsLoading = ref(true)
+const pinsError = ref('')
 
 export interface PinData {
   id: string
@@ -104,42 +48,34 @@ export interface PinData {
   city: string
 }
 
-function generateEntities(city: City): PinData[] {
-  const seed = hashStr(city.name)
-  const count = 3 + (seed % 4)
-  const out: PinData[] = []
-  const types = ['koperasi', 'produsen', 'komunitas']
-  for (let i = 0; i < count; i++) {
-    const s = hashStr(city.name + i)
-    const type = types[s % 3]
-    const lat = city.lat + ((s % 100) / 100 - 0.5) * 0.14
-    const lng = city.lng + (((s >> 3) % 100) / 100 - 0.5) * 0.14
-    const c1 = COMMODITY_POOL[s % COMMODITY_POOL.length] ?? ''
-    const c2 = COMMODITY_POOL[(s >> 5) % COMMODITY_POOL.length] ?? ''
-    const commodities = (c1 === c2 ? [c1] : [c1, c2]).filter(Boolean)
-    const verified = s % 3 !== 0
-    const km = haversineKm(USER_LOCATION, [lat, lng])
-    let name: string
-    let stock: string
-    if (type === 'koperasi') {
-      name = (s % 2 ? 'KMP ' : 'Kop. ') + city.name + (s % 2 ? ' Sejahtera' : ' Merah Putih')
-      stock = `Butuh ${100 + (s % 5) * 100}kg ${c1.toLowerCase()}`
-    } else if (type === 'komunitas') {
-      name = (s % 2 ? 'Kelompok Tani ' : 'Kelompok Nelayan ') + city.name + ` RT ${(s % 12) + 1}`
-      stock = `${150 + (s % 6) * 50}kg ${c1.toLowerCase()}/bln`
-    } else {
-      name = PRODUCER_NAMES[s % PRODUCER_NAMES.length] + ` (${city.name})`
-      stock = `${30 + (s % 8) * 20}kg tersedia`
-    }
-    out.push({
-      id: `${city.name}-${i}`, type, name, commodities, verified,
-      lat, lng, distance: `${km} km`, stock, city: city.name,
-    })
+const allPins = ref<PinData[]>([])
+
+async function loadPins() {
+  pinsLoading.value = true
+  pinsError.value = ''
+  try {
+    const data = await fetchMapPins(USER_LOCATION[0], USER_LOCATION[1])
+    allPins.value = data.pins
+  } catch (e) {
+    pinsError.value = e instanceof Error ? e.message : 'Gagal memuat data peta'
+  } finally {
+    pinsLoading.value = false
   }
-  return out
 }
 
-const allPins: PinData[] = cities.flatMap(generateEntities)
+async function loadCities(q = '') {
+  try {
+    const rows = await fetchCities(q)
+    cities.value = rows.map((c: CitySuggestion) => ({
+      name: c.name,
+      province: c.province,
+      lat: Number(c.lat),
+      lng: Number(c.lng),
+    }))
+  } catch {
+    cities.value = []
+  }
+}
 
 // Lucide SVG inner markup (stroke icons, viewBox 0 0 24 24)
 const ICON_CANDY = '<path d="M10 7v10.9"/><path d="M14 6.1V17"/><path d="M16 7V3a1 1 0 0 1 1.707-.707 2.5 2.5 0 0 0 2.152.717 1 1 0 0 1 1.131 1.131 2.5 2.5 0 0 0 .717 2.152A1 1 0 0 1 21 8h-4"/><path d="M16.536 7.465a5 5 0 0 0-7.072 0l-2 2a5 5 0 0 0 0 7.07 5 5 0 0 0 7.072 0l2-2a5 5 0 0 0 0-7.07"/><path d="M8 17v4a1 1 0 0 1-1.707.707 2.5 2.5 0 0 0-2.152-.717 1 1 0 0 1-1.131-1.131 2.5 2.5 0 0 0-.717-2.152A1 1 0 0 1 3 16h4"/>'
@@ -245,7 +181,7 @@ let clusterGroup: L.LayerGroup | null = null
 let baseLayer: L.TileLayer | null = null
 let labelLayer: L.TileLayer | null = null
 
-const filteredPins = computed(() => allPins.filter((p) => {
+const filteredPins = computed(() => allPins.value.filter((p) => {
   const isKoperasi = p.type === 'koperasi'
   const isKomoditas = p.type === 'produsen' || p.type === 'komunitas'
   if (isKoperasi && !showKoperasi.value) return false
@@ -264,8 +200,8 @@ const filteredPins = computed(() => allPins.filter((p) => {
 
 const citySuggestions = computed(() => {
   const q = search.value.trim().toLowerCase()
-  if (!q) return cities.slice(0, 8)
-  return cities.filter((c) => c.name.toLowerCase().includes(q) || c.province.toLowerCase().includes(q)).slice(0, 8)
+  if (!q) return cities.value.slice(0, 8)
+  return cities.value.filter((c) => c.name.toLowerCase().includes(q) || c.province.toLowerCase().includes(q)).slice(0, 8)
 })
 
 function goToCity(city: City) {
@@ -339,6 +275,8 @@ onMounted(() => {
   })
   map.addLayer(clusterGroup)
   updateMarkers()
+  void loadPins().then(() => updateMarkers())
+  void loadCities()
 
   const fix = () => map?.invalidateSize()
   const t1 = setTimeout(fix, 100)
@@ -360,6 +298,9 @@ onMounted(() => {
 watch(filteredPins, updateMarkers)
 watch(activePin, updateMarkers)
 watch(satellite, setBaseLayers)
+watch(search, (q) => {
+  void loadCities(q.trim())
+})
 </script>
 
 <template>

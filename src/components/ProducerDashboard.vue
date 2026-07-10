@@ -1,36 +1,47 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { Button } from '@/components/ui'
 import {
   Package, Handshake, Wallet, MapPin, ChevronRight, Plus,
   ShieldCheck, AlertCircle, TrendingUp, Sparkles,
 } from 'lucide-vue-next'
+import { DEMO_PRODUCER_ID, fetchProducerDashboard } from '@/api/client'
+import type { ProducerDashboardData } from '@/api/types'
 
-defineEmits<{ navigate: [view: string, data?: unknown] }>()
+const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
-const metrics = [
-  { label: 'Produk Aktif', value: '2', hint: 'sedang tampil di peta', icon: Package, color: 'var(--kompak-secondary)' },
-  { label: 'Transaksi Bulan Ini', value: '3', hint: '+1 dari bulan lalu', icon: Handshake, color: 'var(--kompak-primary)' },
-  { label: 'Pendapatan Bulan Ini', value: 'Rp 4,5Jt', hint: '+18% dari bulan lalu', icon: Wallet, color: 'var(--kompak-accent)' },
-]
+const loading = ref(true)
+const loadError = ref('')
+const greeting = ref('Pak Budi')
+const location = ref('—')
+const metrics = ref<{ label: string; value: string; hint: string; icon: typeof Package; color: string }[]>([])
+const recommendations = ref<ProducerDashboardData['recommendations']>([])
+const products = ref<ProducerDashboardData['products']>([])
+const transactions = ref<ProducerDashboardData['transactions']>([])
 
-const recommendations = [
-  { id: 'r1', name: 'KMP Mekar Bersama', distance: '1,2 km', matchScore: 94, reason: 'Rutin membeli gula aren tiap bulan & sedang butuh 500 kg sekarang.', verified: true, activeNeed: true },
-  { id: 'r2', name: 'Kop. Desa Sejahtera', distance: '3,5 km', matchScore: 81, reason: 'Sudah 6 bulan konsisten membeli gula aren.', verified: true, activeNeed: false },
-  { id: 'r3', name: 'KMP Harapan Baru', distance: '7,8 km', matchScore: 72, reason: 'Berpotensi butuh gula aren berdasarkan pola musiman.', verified: true, activeNeed: false },
-]
-
-const products = [
-  { id: 'pr1', name: 'Gula Aren Murni', qty: '150 kg', price: 'Rp 18.000/kg', status: 'verified' },
-  { id: 'pr2', name: 'Gula Semut', qty: '80 kg', price: 'Rp 22.000/kg', status: 'pending' },
-]
-
-const transactions = [
-  { id: 't1', koperasi: 'KMP Mekar Bersama', qty: '200 kg', date: '5 Jun 2026', value: 'Rp 3.600.000', status: 'selesai' },
-  { id: 't2', koperasi: 'Kop. Desa Harapan', qty: '100 kg', date: '28 Jun 2026', value: 'Rp 1.800.000', status: 'dalam-perjalanan' },
-  { id: 't3', koperasi: 'KMP Mekar Bersama', qty: '150 kg', date: '15 Jul 2026', value: 'Rp 2.700.000', status: 'dijadwalkan' },
-]
+onMounted(async () => {
+  try {
+    const data = await fetchProducerDashboard(DEMO_PRODUCER_ID)
+    greeting.value = data.greeting
+    location.value = data.location
+    metrics.value = [
+      { label: 'Produk Aktif', value: data.metrics[0]?.value || '0', hint: 'sedang tampil di peta', icon: Package, color: 'var(--kompak-secondary)' },
+      { label: 'Transaksi Bulan Ini', value: data.metrics[1]?.value || '0', hint: 'data KOMPAK', icon: Handshake, color: 'var(--kompak-primary)' },
+      { label: 'Pendapatan Bulan Ini', value: data.metrics[2]?.value || 'Rp 0', hint: 'akumulasi transaksi', icon: Wallet, color: 'var(--kompak-accent)' },
+    ]
+    recommendations.value = data.recommendations
+    products.value = data.products
+    transactions.value = data.transactions
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Gagal memuat dashboard'
+  } finally {
+    loading.value = false
+  }
+})
 
 const txStatus: Record<string, { label: string; color: string; bg: string }> = {
+  Selesai: { label: 'Selesai', color: 'var(--kompak-verified)', bg: 'var(--kompak-verified-bg)' },
+  Diproses: { label: 'Diproses', color: 'var(--kompak-secondary)', bg: 'rgba(140,174,62,0.15)' },
   selesai: { label: 'Selesai', color: 'var(--kompak-verified)', bg: 'var(--kompak-verified-bg)' },
   'dalam-perjalanan': { label: 'Dikirim', color: 'var(--kompak-secondary)', bg: 'rgba(140,174,62,0.15)' },
   dijadwalkan: { label: 'Dijadwalkan', color: 'var(--kompak-pending)', bg: 'var(--kompak-pending-bg)' },
@@ -61,14 +72,14 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
         <div>
           <h1
             :style="{
-              fontFamily: 'var(--font-heading)',
+              fontFamily: 'var(--font-body)',
               fontSize: '26px',
               fontWeight: 700,
               color: 'var(--kompak-text-dark)',
               letterSpacing: '-0.02em',
             }"
           >
-            Halo, Pak Budi 👋
+            Halo, {{ greeting }} 👋
           </h1>
           <div
             :style="{
@@ -80,7 +91,7 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
               marginTop: '4px',
             }"
           >
-            <MapPin :size="13" /> Desa Ciawi, Kab. Bogor
+            <MapPin :size="13" /> {{ location }}
           </div>
         </div>
         <Button
@@ -126,7 +137,6 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           </div>
           <div
             :style="{
-              fontFamily: 'var(--font-heading)',
               fontSize: '30px',
               fontWeight: 700,
               color: 'var(--kompak-text-dark)',
@@ -151,7 +161,6 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
         >
           <h2
             :style="{
-              fontFamily: 'var(--font-heading)',
               fontSize: '18px',
               fontWeight: 700,
               color: 'var(--kompak-text-dark)',
@@ -277,7 +286,7 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
                 variant="neutral"
                 size="small"
                 :style="{ flex: 1 }"
-                @click="$emit('navigate', 'entity-detail', { type: 'koperasi', name: rec.name })"
+                @click="emit('navigate', 'entity-detail', { type: 'koperasi', id: rec.id, name: rec.name })"
               >
                 Lihat Profil
               </Button>
@@ -303,7 +312,6 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           >
             <h2
               :style="{
-                fontFamily: 'var(--font-heading)',
                 fontSize: '18px',
                 fontWeight: 700,
                 color: 'var(--kompak-text-dark)',
@@ -333,8 +341,8 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           </div>
           <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
             <div
-              v-for="p in products"
-              :key="p.id"
+              v-for="(p, i) in products"
+              :key="`${p.name}-${i}`"
               :style="{
                 background: 'var(--kompak-surface-white)',
                 borderRadius: 'var(--radius-lg)',
@@ -398,7 +406,6 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           >
             <h2
               :style="{
-                fontFamily: 'var(--font-heading)',
                 fontSize: '18px',
                 fontWeight: 700,
                 color: 'var(--kompak-text-dark)',
@@ -431,7 +438,7 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           >
             <div
               v-for="(tx, i) in transactions"
-              :key="tx.id"
+              :key="`${tx.koperasi}-${tx.date}-${i}`"
               :style="{
                 display: 'flex',
                 alignItems: 'center',
@@ -450,13 +457,13 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
                   :style="{
                     fontSize: '10px',
                     fontWeight: 600,
-                    color: txStatus[tx.status].color,
-                    background: txStatus[tx.status].bg,
+                    color: (txStatus[tx.status] || txStatus.Diproses).color,
+                    background: (txStatus[tx.status] || txStatus.Diproses).bg,
                     padding: '2px 8px',
                     borderRadius: 'var(--radius-full)',
                   }"
                 >
-                  {{ txStatus[tx.status].label }}
+                  {{ (txStatus[tx.status] || txStatus.Diproses).label }}
                 </span>
               </div>
             </div>

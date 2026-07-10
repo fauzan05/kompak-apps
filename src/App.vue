@@ -23,6 +23,7 @@ type View =
   | 'entity-detail'
 
 interface EntityData {
+  id?: string
   type?: string
   name?: string
   lat?: number

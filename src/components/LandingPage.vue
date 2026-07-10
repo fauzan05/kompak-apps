@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import {
   MapPin, Search, ChevronDown, Star, ArrowRight,
-  Sprout, Building2, UserPlus, Map, Package,
-  Zap, Handshake, Truck, ChevronRight,
+  Sprout, Building2, UserPlus, Map,
+  Zap, Handshake, Truck,
 } from 'lucide-vue-next'
+import { fetchCommodities, fetchMapPins, fetchStats } from '@/api/client'
+import type { KomoditasItem, LandingStat, ProducerCard } from '@/api/types'
 
-const emit = defineEmits<{ navigate: [view: string] }>()
+const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
 const searchQuery = ref('')
 const locationQuery = ref('Jakarta Selatan')
+const loading = ref(true)
+const loadError = ref('')
+
+const stats = ref<LandingStat[]>([])
+const komoditas = ref<KomoditasItem[]>([])
+const producerCards = ref<ProducerCard[]>([])
 
 const isScrolled = ref(false)
 if (typeof window !== 'undefined') {
@@ -18,77 +26,37 @@ if (typeof window !== 'undefined') {
   })
 }
 
-const stats = [
-  { value: '12.480', label: 'Produsen Terdaftar', sub: 'individu & komunitas' },
-  { value: '847', label: 'Koperasi Aktif', sub: 'di 34 provinsi' },
-  { value: 'Rp 4,2M', label: 'Nilai Transaksi', sub: 'bulan berjalan' },
-  { value: '63', label: 'Komoditas', sub: 'terpetakan real-time' },
+const statsFallback = [
+  { value: '—', label: 'Produsen Terdaftar', sub: 'memuat…' },
+  { value: '—', label: 'Koperasi Aktif', sub: 'memuat…' },
+  { value: '—', label: 'Nilai Transaksi', sub: 'memuat…' },
+  { value: '—', label: 'Komoditas', sub: 'memuat…' },
 ]
+
+onMounted(async () => {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const [s, k, mapData] = await Promise.all([
+      fetchStats(),
+      fetchCommodities(),
+      fetchMapPins(),
+    ])
+    stats.value = s
+    komoditas.value = k
+    producerCards.value = mapData.producerCards
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Gagal memuat data'
+    stats.value = statsFallback
+  } finally {
+    loading.value = false
+  }
+})
 
 const quickActions = [
   { id: 'map', label: 'Peta Komoditas', desc: 'Temukan produsen terdekat', color: '#0F595E', bg: '#E8F4F4' },
   { id: 'coop-dashboard', label: 'Koperasi Aktif', desc: 'Cari koperasi di wilayah Anda', color: '#0F595E', bg: '#E8F4F4' },
   { id: 'add-product', label: 'Daftar Produsen', desc: 'Pasarkan komoditas Anda', color: '#0F595E', bg: '#E8F4F4' },
-]
-
-const komoditas = [
-  { name: 'Padi & Beras', count: '1.240 produsen', img: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=200&h=200&fit=crop&auto=format' },
-  { name: 'Gula Aren', count: '430 produsen', img: 'https://images.unsplash.com/photo-1559181567-c3190ca9d5db?w=200&h=200&fit=crop&auto=format' },
-  { name: 'Kopi', count: '876 produsen', img: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=200&h=200&fit=crop&auto=format' },
-  { name: 'Sayuran', count: '2.100 produsen', img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=200&h=200&fit=crop&auto=format' },
-  { name: 'Buah Tropis', count: '950 produsen', img: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=200&h=200&fit=crop&auto=format' },
-  { name: 'Rempah', count: '310 produsen', img: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=200&h=200&fit=crop&auto=format' },
-]
-
-const producerCards = [
-  {
-    id: 1,
-    name: 'Kelompok Tani Harapan Jaya',
-    commodity: 'Padi, Beras Organik',
-    location: 'Kab. Subang, Jawa Barat',
-    rating: 4.8,
-    reviews: 124,
-    distance: '2,3 km',
-    badge: 'Terverifikasi',
-    img: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&h=280&fit=crop&auto=format',
-    tags: ['Padi', 'Organik'],
-  },
-  {
-    id: 2,
-    name: 'KMP Mekar Desa Sentosa',
-    commodity: 'Gula Aren Premium',
-    location: 'Kab. Ciamis, Jawa Barat',
-    rating: 4.9,
-    reviews: 87,
-    distance: '5,1 km',
-    badge: 'Top Produsen',
-    img: 'https://images.unsplash.com/photo-1559181567-c3190ca9d5db?w=400&h=280&fit=crop&auto=format',
-    tags: ['Gula Aren', 'Premium'],
-  },
-  {
-    id: 3,
-    name: 'Kebun Kopi Arabika Gayo',
-    commodity: 'Kopi Arabika, Robusta',
-    location: 'Kab. Aceh Tengah, Aceh',
-    rating: 4.7,
-    reviews: 213,
-    distance: '12,4 km',
-    badge: 'Populer',
-    img: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=400&h=280&fit=crop&auto=format',
-    tags: ['Kopi', 'Arabika'],
-  },
-  {
-    id: 4,
-    name: 'Koperasi Sayur Segar Nusantara',
-    commodity: 'Sayuran Organik, Herbal',
-    location: 'Kab. Malang, Jawa Timur',
-    rating: 4.6,
-    reviews: 156,
-    distance: '8,7 km',
-    badge: 'Terverifikasi',
-    img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=280&fit=crop&auto=format',
-    tags: ['Sayuran', 'Herbal'],
-  },
 ]
 
 const features = [
@@ -248,7 +216,7 @@ const hoveredAction = ref<number | null>(null)
           :key="card.id"
           class="producer-card"
           :class="{ 'producer-card--hovered': hoveredCard === i }"
-          @click="emit('navigate', 'map')"
+          @click="emit('navigate', 'entity-detail', { type: card.type || 'produsen', id: card.id, name: card.name })"
           @mouseenter="hoveredCard = i"
           @mouseleave="hoveredCard = null"
         >
@@ -348,7 +316,7 @@ const hoveredAction = ref<number | null>(null)
 .lp-root {
   flex: 1;
   overflow-y: auto;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-body);
   background: #F2F2F2;
   scrollbar-width: none;
   -webkit-font-smoothing: antialiased;
@@ -390,6 +358,7 @@ const hoveredAction = ref<number | null>(null)
   justify-content: center;
 }
 .navbar__wordmark {
+  font-family: var(--font-heading);
   font-size: 18px;
   font-weight: 700;
   color: #1A2B2C;
@@ -547,6 +516,7 @@ const hoveredAction = ref<number | null>(null)
   width: 100%;
 }
 .hero__headline {
+  font-family: var(--font-heading);
   font-size: clamp(28px, 4vw, 46px);
   font-weight: 800;
   color: #fff;
@@ -646,6 +616,7 @@ const hoveredAction = ref<number | null>(null)
 .section--gray { background: #F2F2F2; }
 .section--white { background: #fff; }
 .section__title {
+  font-family: var(--font-heading);
   font-size: 20px;
   font-weight: 700;
   color: #1A2B2C;
@@ -962,6 +933,7 @@ const hoveredAction = ref<number | null>(null)
   margin: 0 auto;
 }
 .cta-banner__headline {
+  font-family: var(--font-heading);
   font-size: clamp(24px, 3.5vw, 38px);
   font-weight: 800;
   color: #fff;
@@ -1008,6 +980,7 @@ const hoveredAction = ref<number | null>(null)
   justify-content: center;
 }
 .footer__wordmark {
+  font-family: var(--font-heading);
   font-size: 15px;
   font-weight: 700;
   color: #1A2B2C;

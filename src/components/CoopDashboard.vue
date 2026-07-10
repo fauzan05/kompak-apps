@@ -1,34 +1,52 @@
 <script setup lang="ts">
-import { ref, type Component } from 'vue'
+import { onMounted, ref, type Component } from 'vue'
 import { Button, Tabs } from '@/components/ui'
 import {
   Sprout, Users, MapPin, Plus, Bell, Clock, ChevronRight, Package, Truck,
   CheckCircle, AlertCircle, Filter, Handshake,
 } from 'lucide-vue-next'
+import { DEMO_COOP_ID, fetchCoopDashboard } from '@/api/client'
+import type { CoopDashboardData } from '@/api/types'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
-const activeNeeds = [
-  { id: 'n1', commodity: 'Gula Aren', qty: '500 kg', deadline: '20 Jul 2026', responses: 4, status: 'aktif', daysLeft: 10 },
-  { id: 'n2', commodity: 'Kopi Robusta', qty: '200 kg', deadline: '5 Agu 2026', responses: 2, status: 'aktif', daysLeft: 26 },
-]
+const loading = ref(true)
+const loadError = ref('')
+const title = ref('Dashboard Koperasi')
+const location = ref('—')
+const stats = ref<{ label: string; value: string; icon: Component; color: string }[]>([])
+const activeNeeds = ref<CoopDashboardData['activeNeeds']>([])
+const producers = ref<CoopDashboardData['producers']>([])
+const orders = ref<CoopDashboardData['orders']>([])
 
-const producers = [
-  { id: 'p1', name: 'Pak Budi Santoso', type: 'produsen', commodity: 'Gula Aren', qty: '150 kg tersedia', distance: '2.1 km', verified: true, matchScore: 94, price: 'Rp 18.000/kg' },
-  { id: 'p2', name: 'Kelompok Tani RT 05', type: 'komunitas', commodity: 'Gula Aren', qty: '300 kg/bulan', distance: '5.2 km', verified: true, matchScore: 87, price: 'Rp 17.500/kg' },
-  { id: 'p3', name: 'Bu Sari Wahyuni', type: 'produsen', commodity: 'Gula Aren', qty: '80 kg tersedia', distance: '6.8 km', verified: false, matchScore: 72, price: 'Rp 18.500/kg' },
-]
-
-const orders = [
-  { id: 'o1', supplier: 'Pak Budi Santoso', commodity: 'Gula Aren', qty: '200 kg', status: 'dalam-perjalanan', date: '28 Jun 2026' },
-  { id: 'o2', supplier: 'Kelompok Tani RT 05', commodity: 'Sayuran Segar', qty: '150 kg', status: 'dijadwalkan', date: '15 Jul 2026' },
-  { id: 'o3', supplier: 'Bu Aminah', commodity: 'Kopi Robusta', qty: '100 kg', status: 'selesai', date: '10 Jun 2026' },
-]
+onMounted(async () => {
+  try {
+    const data = await fetchCoopDashboard(DEMO_COOP_ID)
+    title.value = data.title
+    location.value = data.location
+    stats.value = [
+      { label: 'Kebutuhan Aktif', value: data.stats[0]?.value || '0', icon: Bell, color: 'var(--kompak-accent)' },
+      { label: 'Pesanan Berjalan', value: data.stats[1]?.value || '0', icon: Truck, color: 'var(--kompak-secondary)' },
+      { label: 'Produsen Tersedia', value: data.stats[2]?.value || '0', icon: Sprout, color: 'var(--kompak-primary)' },
+      { label: 'Transaksi Bulan Ini', value: data.stats[3]?.value || '0', icon: Handshake, color: 'var(--kompak-primary)' },
+    ]
+    activeNeeds.value = data.activeNeeds
+    needsList.value = data.activeNeeds
+    producers.value = data.producers
+    orders.value = data.orders
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Gagal memuat dashboard'
+  } finally {
+    loading.value = false
+  }
+})
 
 const orderStatusConfig: Record<string, { label: string; color: string; bg: string; icon: Component }> = {
   'dalam-perjalanan': { label: 'Dalam Perjalanan', color: 'var(--kompak-secondary)', bg: 'rgba(110,139,61,0.12)', icon: Truck },
   dijadwalkan: { label: 'Dijadwalkan', color: 'var(--kompak-accent)', bg: 'var(--kompak-pending-bg)', icon: Clock },
   selesai: { label: 'Selesai', color: 'var(--kompak-verified)', bg: 'var(--kompak-verified-bg)', icon: CheckCircle },
+  Selesai: { label: 'Selesai', color: 'var(--kompak-verified)', bg: 'var(--kompak-verified-bg)', icon: CheckCircle },
+  diproses: { label: 'Diproses', color: 'var(--kompak-accent)', bg: 'var(--kompak-pending-bg)', icon: Clock },
 }
 
 const tabs = [
@@ -37,20 +55,13 @@ const tabs = [
   { id: 'pesanan', label: 'Pelacakan Pesanan' },
 ]
 
-const stats = [
-  { label: 'Kebutuhan Aktif', value: '2', icon: Bell, color: 'var(--kompak-accent)' },
-  { label: 'Pesanan Berjalan', value: '1', icon: Truck, color: 'var(--kompak-secondary)' },
-  { label: 'Produsen Tersedia', value: '12', icon: Sprout, color: 'var(--kompak-primary)' },
-  { label: 'Transaksi Bulan Ini', value: '5', icon: Handshake, color: 'var(--kompak-primary)' },
-]
-
-const needsList = ref(activeNeeds)
+const needsList = ref<CoopDashboardData['activeNeeds']>([])
 
 function closeNeed(id: string) {
   needsList.value = needsList.value.filter((n) => n.id !== id)
 }
 
-function needMeta(need: (typeof activeNeeds)[number]) {
+function needMeta(need: CoopDashboardData['activeNeeds'][number]) {
   return [
     { label: 'Batas Waktu', value: need.deadline, icon: Clock as Component | null, color: 'var(--kompak-accent)' },
     { label: 'Sisa Waktu', value: `${need.daysLeft} hari`, icon: null, color: 'var(--kompak-accent)' },
@@ -58,7 +69,7 @@ function needMeta(need: (typeof activeNeeds)[number]) {
   ]
 }
 
-function producerFields(p: (typeof producers)[number]) {
+function producerFields(p: CoopDashboardData['producers'][number]) {
   return [
     { label: 'Komoditas', value: p.commodity },
     { label: 'Stok', value: p.qty },
@@ -70,24 +81,27 @@ function producerFields(p: (typeof producers)[number]) {
 <template>
   <div :style="{ flex: 1, overflowY: 'auto', padding: 'var(--space-2xl)', display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)', background: 'var(--kompak-canvas)', fontFamily: 'var(--font-body)' }">
     <div>
-      <h1 :style="{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Dashboard Koperasi</h1>
-      <p :style="{ fontSize: '14px', color: 'var(--kompak-text-muted)', marginTop: 'var(--space-xs)' }">KMP Mekar Bersama · Kab. Bogor · Terverifikasi</p>
+      <h1 :style="{ fontFamily: 'var(--font-body)', fontSize: '24px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Dashboard Koperasi</h1>
+      <p :style="{ fontSize: '14px', color: 'var(--kompak-text-muted)', marginTop: 'var(--space-xs)' }">{{ title }} · {{ location }} · Terverifikasi</p>
     </div>
 
     <!-- Stats -->
-    <div :style="{ display: 'grid', gap: 'var(--space-lg)', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }">
+    <div class="stats-grid">
       <div
         v-for="stat in stats"
         :key="stat.label"
-        :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', padding: 'var(--space-xl)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }"
+        class="stat-card"
       >
-        <div :style="{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: `${stat.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }">
-          <component :is="stat.icon" :size="18" :color="stat.color" />
+        <div class="stat-card__header">
+          <span class="stat-card__label">{{ stat.label }}</span>
+          <div
+            class="stat-card__icon"
+            :style="{ background: `color-mix(in srgb, ${stat.color} 14%, transparent)` }"
+          >
+            <component :is="stat.icon" :size="20" :color="stat.color" />
+          </div>
         </div>
-        <div>
-          <div :style="{ fontFamily: 'var(--font-heading)', fontSize: '22px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">{{ stat.value }}</div>
-          <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ stat.label }}</div>
-        </div>
+        <div class="stat-card__value">{{ stat.value }}</div>
       </div>
     </div>
 
@@ -212,7 +226,7 @@ function producerFields(p: (typeof producers)[number]) {
                   </div>
                 </div>
                 <div :style="{ display: 'flex', gap: 'var(--space-md)' }">
-                  <Button variant="neutral" size="small" :style="{ flex: 1 }" @click="emit('navigate', 'entity-detail', { type: p.type, name: p.name })">Lihat Etalase</Button>
+                  <Button variant="neutral" size="small" :style="{ flex: 1 }" @click="emit('navigate', 'entity-detail', { type: p.type, id: p.id, name: p.name })">Lihat Etalase</Button>
                   <Button variant="primary" size="small" :style="{ flex: 1 }">
                     Jadwalkan Pickup
                     <template #iconEnd><Truck :size="14" /></template>
@@ -224,19 +238,19 @@ function producerFields(p: (typeof producers)[number]) {
             <!-- Pelacakan Pesanan -->
             <div v-else-if="active === 'pesanan'" :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
               <div
-                v-for="order in orders"
-                :key="order.id"
+                v-for="(order, i) in orders"
+                :key="`${order.supplier}-${order.date}-${i}`"
                 :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', padding: 'var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)' }"
               >
-                <div :style="{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: orderStatusConfig[order.status].bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }">
-                  <component :is="orderStatusConfig[order.status].icon" :size="20" :color="orderStatusConfig[order.status].color" />
+                <div :style="{ width: 40, height: 40, borderRadius: 'var(--radius-md)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }">
+                  <component :is="(orderStatusConfig[order.status] || orderStatusConfig.diproses).icon" :size="20" :color="(orderStatusConfig[order.status] || orderStatusConfig.diproses).color" />
                 </div>
                 <div :style="{ flex: 1, minWidth: 0 }">
                   <div :style="{ fontSize: '14px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ order.supplier }}</div>
                   <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ order.commodity }} · {{ order.qty }}</div>
                 </div>
                 <div :style="{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-xs)' }">
-                  <span :style="{ padding: '2px 8px', borderRadius: 'var(--radius-full)', background: orderStatusConfig[order.status].bg, color: orderStatusConfig[order.status].color, fontSize: '11px', fontWeight: 600 }">{{ orderStatusConfig[order.status].label }}</span>
+                  <span :style="{ padding: '2px 8px', borderRadius: 'var(--radius-full)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, color: (orderStatusConfig[order.status] || orderStatusConfig.diproses).color, fontSize: '11px', fontWeight: 600 }">{{ (orderStatusConfig[order.status] || orderStatusConfig.diproses).label }}</span>
                   <span :style="{ fontSize: '11px', color: 'var(--kompak-text-light)' }">{{ order.date }}</span>
                 </div>
               </div>
@@ -247,3 +261,69 @@ function producerFields(p: (typeof producers)[number]) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  background: var(--kompak-surface-white);
+  border: 1px solid var(--kompak-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  min-height: 108px;
+}
+
+.stat-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.stat-card__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kompak-text-muted);
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-card__value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--kompak-text-dark);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

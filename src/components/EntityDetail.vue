@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, type Component } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Button } from '@/components/ui'
+import { fetchEntity } from '@/api/client'
+import type { EntityDetailData } from '@/api/types'
 import {
   Sprout, Store, Users, MapPin, ShieldCheck, AlertCircle, Phone, ChevronLeft,
   Handshake, Zap, TrendingUp, Star, Clock, Package, MessageCircle, Calendar, Leaf,
@@ -10,6 +12,7 @@ import {
 
 interface EntityLike {
   type?: string
+  id?: string
   name?: string
   lat?: number
   lng?: number
@@ -55,6 +58,27 @@ function photoFor(name: string): string {
   return PHOTOS[key || 'default']
 }
 
+const detail = ref<EntityDetailData | null>(null)
+const loading = ref(false)
+const loadError = ref('')
+
+async function loadDetail() {
+  const id = props.entity?.id
+  const type = props.entity?.type
+  if (!id || !type) return
+  loading.value = true
+  loadError.value = ''
+  try {
+    detail.value = await fetchEntity(type, id)
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Gagal memuat profil'
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(() => [props.entity?.id, props.entity?.type], loadDetail, { immediate: true })
+
 const producerData = {
   location: 'Desa Ciawi, Kab. Bogor, Jawa Barat',
   phone: '0812-3456-7890',
@@ -96,9 +120,9 @@ const coopData = {
   addedValue: [] as string[],
 }
 
-const isKoperasi = computed(() => props.entity?.type === 'koperasi')
-const isKomunitas = computed(() => props.entity?.type === 'komunitas')
-const base = computed(() => (isKoperasi.value ? coopData : producerData))
+const isKoperasi = computed(() => (detail.value?.type || props.entity?.type) === 'koperasi')
+const isKomunitas = computed(() => (detail.value?.type || props.entity?.type) === 'komunitas')
+const base = computed(() => detail.value || (isKoperasi.value ? coopData : producerData))
 const entityIcon = computed<Component>(() => (isKoperasi.value ? Store : isKomunitas.value ? Users : Sprout))
 const pinColor = computed(() =>
   isKoperasi.value ? 'var(--kompak-pin-coop)' : isKomunitas.value ? 'var(--kompak-pin-community)' : 'var(--kompak-pin-producer)',
@@ -107,28 +131,46 @@ const typeLabel = computed(() =>
   isKoperasi.value ? 'Koperasi' : isKomunitas.value ? 'Komunitas / Kelompok' : 'Produsen Individu',
 )
 
-const name = computed(() => props.entity?.name || (isKoperasi.value ? 'KMP Mekar Bersama' : 'Pak Budi Santoso'))
-const lat = computed(() => props.entity?.lat ?? -6.60)
-const lng = computed(() => props.entity?.lng ?? 106.80)
-const location = computed(() => (props.entity?.city ? `${props.entity.city}, Indonesia` : base.value.location))
-const distance = computed(() => props.entity?.distance || '2.1 km')
-const verified = computed(() => props.entity?.verified ?? true)
+const name = computed(() => detail.value?.name || props.entity?.name || (isKoperasi.value ? 'Koperasi' : 'Produsen'))
+const lat = computed(() => detail.value?.lat ?? props.entity?.lat ?? -6.60)
+const lng = computed(() => detail.value?.lng ?? props.entity?.lng ?? 106.80)
+const location = computed(() => detail.value?.location || (props.entity?.city ? `${props.entity.city}, Indonesia` : (base.value as typeof producerData).location))
+const distance = computed(() => props.entity?.distance || '—')
+const verified = computed(() => detail.value?.verified ?? props.entity?.verified ?? true)
 
-const products = computed(() =>
-  props.entity?.commodities && props.entity.commodities.length
-    ? props.entity.commodities.map((c) => ({
-        name: c,
-        qty: isKoperasi.value ? `Butuh ${100 + (c.length % 4) * 100} kg` : `${50 + (c.length % 5) * 40} kg tersedia`,
-        price: isKoperasi.value ? 'Penawaran terbuka' : `Rp ${(12 + (c.length % 8))}.000/kg`,
-      }))
-    : base.value.commodities,
-)
+const products = computed(() => {
+  if (detail.value?.commodities?.length) return detail.value.commodities
+  if (props.entity?.commodities?.length) {
+    return props.entity.commodities.map((c) => ({
+      name: c,
+      qty: isKoperasi.value ? `Butuh ${100 + (c.length % 4) * 100} kg` : `${50 + (c.length % 5) * 40} kg tersedia`,
+      price: isKoperasi.value ? 'Penawaran terbuka' : `Rp ${(12 + (c.length % 8))}.000/kg`,
+    }))
+  }
+  return (base.value as typeof producerData).commodities
+})
 
-const stats = computed(() => [
-  { label: 'Transaksi', value: `${base.value.transactions}+` },
-  { label: 'Rating', value: `${base.value.rating}` },
-  { label: 'Ulasan', value: `${base.value.ratingCount}` },
-])
+const stats = computed(() => {
+  const b = detail.value
+  if (b) {
+    return [
+      { label: 'Transaksi', value: `${b.transactions}+` },
+      { label: 'Rating', value: `${b.rating}` },
+      { label: 'Ulasan', value: `${b.ratingCount}` },
+    ]
+  }
+  const fallback = base.value as typeof producerData
+  return [
+    { label: 'Transaksi', value: `${fallback.transactions}+` },
+    { label: 'Rating', value: `${fallback.rating}` },
+    { label: 'Ulasan', value: `${fallback.ratingCount}` },
+  ]
+})
+
+const aboutText = computed(() => detail.value?.about || (base.value as typeof producerData).about)
+const phoneText = computed(() => detail.value?.phone || (base.value as typeof producerData).phone)
+const recentTx = computed(() => detail.value?.recentTx || (base.value as typeof producerData).recentTx)
+const addedValue = computed(() => detail.value?.addedValue || (base.value as typeof producerData).addedValue)
 
 const markerIcon = computed(() => {
   const color = isKoperasi.value ? '#0F595E' : isKomunitas.value ? '#8CAE3E' : '#C48A2A'
@@ -210,13 +252,13 @@ function onGalleryLeave(e: Event) {
             <span :style="{ display: 'inline-block', fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#fff', background: 'rgba(255,255,255,0.2)', padding: '3px 10px', borderRadius: 'var(--radius-full)', marginBottom: 'var(--space-md)' }">
               {{ typeLabel }}
             </span>
-            <h1 :style="{ fontFamily: 'var(--font-heading)', fontSize: '34px', fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }">{{ name }}</h1>
+            <h1 :style="{ fontFamily: 'var(--font-body)', fontSize: '34px', fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }">{{ name }}</h1>
             <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', marginTop: 'var(--space-md)', flexWrap: 'wrap' }">
               <span :style="{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'rgba(255,255,255,0.85)' }">
                 <MapPin :size="13" /> {{ location }} · {{ distance }}
               </span>
               <span :style="{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'rgba(255,255,255,0.85)' }">
-                <Star :size="13" fill="#fff" color="#fff" /> {{ base.rating }} ({{ base.ratingCount }})
+                <Star :size="13" fill="#fff" color="#fff" /> {{ detail?.rating ?? (base as typeof producerData).rating }} ({{ detail?.ratingCount ?? (base as typeof producerData).ratingCount }})
               </span>
               <span
                 v-if="verified"
@@ -241,7 +283,7 @@ function onGalleryLeave(e: Event) {
       <div :style="{ maxWidth: '1100px', margin: '0 auto', padding: 'var(--space-lg) var(--space-2xl)', display: 'flex', alignItems: 'center', gap: 'var(--space-lg)' }">
         <div :style="{ display: 'flex', gap: 'var(--space-2xl)', flex: 1, overflowX: 'auto' }">
           <div v-for="s in stats" :key="s.label" :style="{ flexShrink: 0 }">
-            <div :style="{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', lineHeight: 1 }">{{ s.value }}</div>
+            <div :style="{ fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', lineHeight: 1 }">{{ s.value }}</div>
             <div :style="{ fontSize: '11px', color: 'var(--kompak-text-muted)', marginTop: '2px' }">{{ s.label }}</div>
           </div>
         </div>
@@ -262,7 +304,7 @@ function onGalleryLeave(e: Event) {
       <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2xl)' }">
         <!-- Products -->
         <div>
-          <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', letterSpacing: '-0.01em', marginBottom: 'var(--space-lg)' }">
+          <h2 :style="{ fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', letterSpacing: '-0.01em', marginBottom: 'var(--space-lg)' }">
             {{ isKoperasi ? 'Komoditas yang Dibutuhkan' : 'Produk Tersedia' }}
           </h2>
           <div class="product-grid" :style="{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-xl)' }">
@@ -292,7 +334,7 @@ function onGalleryLeave(e: Event) {
 
         <!-- Gallery -->
         <div>
-          <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', letterSpacing: '-0.01em', marginBottom: 'var(--space-lg)' }">
+          <h2 :style="{ fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', letterSpacing: '-0.01em', marginBottom: 'var(--space-lg)' }">
             Galeri Kebun & Panen
           </h2>
           <div class="gallery-grid" :style="{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-md)' }">
@@ -316,23 +358,23 @@ function onGalleryLeave(e: Event) {
         <div :style="{ background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)', padding: 'var(--space-2xl)' }">
           <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }">
             <Leaf :size="18" color="var(--kompak-secondary)" />
-            <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Tentang</h2>
+            <h2 :style="{ fontSize: '18px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Tentang</h2>
           </div>
-          <p :style="{ fontSize: '14px', lineHeight: 1.7, color: 'var(--kompak-text-muted)' }">{{ base.about }}</p>
+          <p :style="{ fontSize: '14px', lineHeight: 1.7, color: 'var(--kompak-text-muted)' }">{{ aboutText }}</p>
         </div>
 
         <!-- Added value -->
         <div
-          v-if="!isKoperasi && base.addedValue.length > 0"
+          v-if="!isKoperasi && addedValue.length > 0"
           :style="{ border: '1px solid rgba(196,138,42,0.3)', background: 'var(--kompak-pending-bg)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-2xl)' }"
         >
           <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }">
             <Zap :size="18" color="var(--kompak-pending)" />
-            <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Rekomendasi Nilai Tambah</h2>
+            <h2 :style="{ fontSize: '18px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Rekomendasi Nilai Tambah</h2>
           </div>
           <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
             <div
-              v-for="(tip, i) in base.addedValue"
+              v-for="(tip, i) in addedValue"
               :key="i"
               :style="{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-md)', padding: 'var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(196,138,42,0.2)' }"
             >
@@ -344,14 +386,14 @@ function onGalleryLeave(e: Event) {
 
         <!-- Transactions -->
         <div :style="{ background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)', padding: 'var(--space-2xl)' }">
-          <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', letterSpacing: '-0.01em', marginBottom: 'var(--space-lg)' }">
+          <h2 :style="{ fontSize: '20px', fontWeight: 700, color: 'var(--kompak-text-dark)', letterSpacing: '-0.01em', marginBottom: 'var(--space-lg)' }">
             Riwayat Transaksi
           </h2>
           <div :style="{ display: 'flex', flexDirection: 'column' }">
             <div
-              v-for="(tx, i) in base.recentTx"
+              v-for="(tx, i) in recentTx"
               :key="i"
-              :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', padding: 'var(--space-md) 0', borderBottom: i < base.recentTx.length - 1 ? '1px solid var(--kompak-border)' : 'none' }"
+              :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-lg)', padding: 'var(--space-md) 0', borderBottom: i < recentTx.length - 1 ? '1px solid var(--kompak-border)' : 'none' }"
             >
               <div :style="{ width: 38, height: 38, borderRadius: 'var(--radius-md)', background: 'var(--kompak-verified-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }">
                 <Handshake :size="18" color="var(--kompak-verified)" />
@@ -376,7 +418,7 @@ function onGalleryLeave(e: Event) {
             <div ref="mapRef" :style="{ width: '100%', height: '100%' }" />
           </div>
           <div :style="{ padding: 'var(--space-xl)' }">
-            <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: 'var(--kompak-text-dark)', marginBottom: 'var(--space-md)' }">Lokasi</h2>
+            <h2 :style="{ fontSize: '16px', fontWeight: 700, color: 'var(--kompak-text-dark)', marginBottom: 'var(--space-md)' }">Lokasi</h2>
             <div :style="{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-md)' }">
               <MapPin :size="15" color="var(--kompak-primary)" :style="{ flexShrink: 0, marginTop: '2px' }" />
               <span :style="{ fontSize: '13px', color: 'var(--kompak-text-dark)', lineHeight: 1.5 }">{{ location }}</span>
@@ -386,10 +428,10 @@ function onGalleryLeave(e: Event) {
 
         <!-- Contact -->
         <div :style="{ background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)', padding: 'var(--space-xl)' }">
-          <h2 :style="{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: 'var(--kompak-text-dark)', marginBottom: 'var(--space-lg)' }">Kontak</h2>
+          <h2 :style="{ fontSize: '16px', fontWeight: 700, color: 'var(--kompak-text-dark)', marginBottom: 'var(--space-lg)' }">Kontak</h2>
           <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
             <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', fontSize: '13px', color: 'var(--kompak-text-dark)' }">
-              <Phone :size="15" color="var(--kompak-primary)" /> {{ base.phone }}
+              <Phone :size="15" color="var(--kompak-primary)" /> {{ phoneText }}
             </div>
             <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', fontSize: '13px', color: 'var(--kompak-text-dark)' }">
               <Calendar :size="15" color="var(--kompak-primary)" /> Aktif · Senin–Sabtu
@@ -409,7 +451,7 @@ function onGalleryLeave(e: Event) {
 
         <!-- Rating -->
         <div :style="{ background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', border: '1px solid var(--kompak-border)', padding: 'var(--space-xl)', display: 'flex', alignItems: 'center', gap: 'var(--space-lg)' }">
-          <div :style="{ fontFamily: 'var(--font-heading)', fontSize: '40px', fontWeight: 700, color: 'var(--kompak-text-dark)', lineHeight: 1 }">{{ base.rating }}</div>
+          <div :style="{ fontSize: '40px', fontWeight: 700, color: 'var(--kompak-text-dark)', lineHeight: 1 }">{{ detail?.rating ?? (base as typeof producerData).rating }}</div>
           <div>
             <div :style="{ display: 'flex', gap: '2px' }">
               <Star
@@ -417,10 +459,10 @@ function onGalleryLeave(e: Event) {
                 :key="s"
                 :size="15"
                 color="var(--kompak-accent)"
-                :fill="s <= Math.round(base.rating) ? 'var(--kompak-accent)' : 'none'"
+                :fill="s <= Math.round(detail?.rating ?? (base as typeof producerData).rating) ? 'var(--kompak-accent)' : 'none'"
               />
             </div>
-            <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: '4px' }">dari {{ base.ratingCount }} ulasan</div>
+            <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: '4px' }">dari {{ detail?.ratingCount ?? (base as typeof producerData).ratingCount }} ulasan</div>
           </div>
         </div>
       </div>

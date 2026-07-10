@@ -14,6 +14,8 @@ import {
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
+import { DEMO_PRODUCER_ID, submitProduct } from '@/api/client'
+
 const emit = defineEmits<{ navigate: [view: string] }>()
 
 const steps: { id: number; label: string; icon: Component }[] = [
@@ -58,6 +60,30 @@ const entityTypeOptions = [
 
 const step = ref(1)
 const submitted = ref(false)
+const submitting = ref(false)
+const submitError = ref('')
+
+async function handleSubmit() {
+  submitting.value = true
+  submitError.value = ''
+  try {
+    await submitProduct({
+      namaKomoditas: commodityLabel.value,
+      jumlah: Number(form.quantity) || 0,
+      satuan: form.unit,
+      harga: form.price ? Number(form.price.replace(/\D/g, '')) : undefined,
+      namaEntitas: form.name || 'Produsen Baru',
+      tipeEntitas: form.entityType === 'komunitas' ? 'komunitas' : 'produsen',
+      telepon: form.phone,
+      entitasRef: DEMO_PRODUCER_ID,
+    })
+    submitted.value = true
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : 'Gagal menyimpan produk'
+  } finally {
+    submitting.value = false
+  }
+}
 
 const form = reactive({
   name: '',
@@ -125,7 +151,6 @@ const previewRows = computed(() => [
     <div>
       <h2
         :style="{
-          fontFamily: 'var(--font-heading)',
           fontSize: '22px',
           fontWeight: 700,
           color: 'var(--kompak-text-dark)',
@@ -175,7 +200,6 @@ const previewRows = computed(() => [
     <div>
       <h1
         :style="{
-          fontFamily: 'var(--font-heading)',
           fontSize: '22px',
           fontWeight: 700,
           color: 'var(--kompak-text-dark)',
@@ -294,7 +318,6 @@ const previewRows = computed(() => [
         <div>
           <h2
             :style="{
-              fontFamily: 'var(--font-heading)',
               fontSize: '18px',
               fontWeight: 700,
               color: 'var(--kompak-text-dark)',
@@ -423,7 +446,6 @@ const previewRows = computed(() => [
         <div>
           <h2
             :style="{
-              fontFamily: 'var(--font-heading)',
               fontSize: '18px',
               fontWeight: 700,
               color: 'var(--kompak-text-dark)',
@@ -539,7 +561,6 @@ const previewRows = computed(() => [
         <div>
           <h2
             :style="{
-              fontFamily: 'var(--font-heading)',
               fontSize: '18px',
               fontWeight: 700,
               color: 'var(--kompak-text-dark)',
@@ -581,7 +602,6 @@ const previewRows = computed(() => [
             <div>
               <div
                 :style="{
-                  fontFamily: 'var(--font-heading)',
                   fontSize: '16px',
                   fontWeight: 700,
                   color: 'var(--kompak-text-dark)',
@@ -709,7 +729,8 @@ const previewRows = computed(() => [
           v-else
           variant="primary"
           :style="{ background: 'var(--kompak-accent)' }"
-          @click="submitted = true"
+          :disabled="submitting"
+          @click="handleSubmit"
         >
           Publikasikan Produk
           <template #iconEnd>

@@ -1,6 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
   --font-heading: 'Playfair Display', Georgia, 'Times New Roman', serif;
   --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
+
+/* Body font everywhere by default */
+html,
+body,
+#app {
+  font-family: var(--font-body);
+}
+
+/* Heading font: brand + landing hero/sections only (app UI stays Inter) */
