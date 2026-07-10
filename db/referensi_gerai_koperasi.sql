@@ -1,0 +1,9 @@
+insert into public.referensi_gerai_koperasi (jenis_gerai_ref, nama_jenis_gerai, dibuat_pada, diperbarui_pada)
+values  ('JENIS-GERAI-9B8BB8396D', 'Apotek Desa', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-BE6B6A2B01', 'Gerai Cold Storage/Cold Chain', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-8112C21704', 'Gerai Kantor Koperasi', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-FDB1681AD5', 'Gerai Klinik Desa', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-B5D536E874', 'Gerai Sembako (Embrio KopHub)', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-40F1F69AF4', 'Gerai Unit Usaha Simpan Pinjam (Embrio Kop Bank)', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-5BB9593DB7', 'Logistik (Distribusi)', '2025-04-09 16:51:54.000000', '2025-04-09 16:51:54.000000'),
+        ('JENIS-GERAI-CCD4662078', 'Usaha Lainnya (KBLI 2020)', '2025-04-17 02:56:53.000000', '2025-04-17 02:56:53.000000');

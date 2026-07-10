@@ -1,0 +1,9 @@
+insert into public.referensi_dokumen_koperasi (jenis_dokumen_ref, nama_dokumen, dibuat_pada, diperbarui_pada)
+values  ('JENIS-DOC-F49EF56C92', 'Akta Pendirian', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-E27F233795', 'Akta Pendirian - Perubahan', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-62A46E908D', 'Berita Negara (BN)', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-018B05092C', 'Nomor Induk Berusaha (NIB)', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-BD46961E09', 'Nomor Pokok Wajib Pajak (NPWP)', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-180AA1F25E', 'Surat Keputusan Kemenkumham (SK AHU)', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-8693952152', 'Surat Keputusan Kemenkumham (SK AHU) - Perubahan', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000'),
+        ('JENIS-DOC-8693952152aaa', '-', '2026-06-05 05:55:11.000000', '2026-06-05 05:55:11.000000');
