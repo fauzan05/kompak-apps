@@ -1,0 +1,47 @@
+---
+description: Design tokens dan pola UI KOMPAK
+globs: "src/components/**/*.vue,src/styles/**"
+alwaysApply: false
+---
+
+# KOMPAK Design System
+
+## Tokens
+
+Semua warna, spacing, radius, shadow dari `src/styles/globals.css`:
+
+- Brand: `--kompak-primary`, `--kompak-primary-dark`, `--kompak-secondary`, `--kompak-accent`
+- Text: `--kompak-text-dark`, `--kompak-text-muted`, `--kompak-text-light`
+- Surface: `--kompak-canvas`, `--kompak-surface-white`, `--kompak-card-bg`
+- Status: `--kompak-verified`, `--kompak-pending`, `--kompak-danger` (+ `-bg` variants)
+- Spacing: `--space-xs` … `--space-2xl`
+- Radius: `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-full`
+- Shadow: `--shadow-card`, `--shadow-elevated`
+- Font: `--font-body`, `--font-heading`
+
+Jangan hardcode hex brand baru tanpa menambah token di globals.css.
+
+## Button
+
+- Variants: `primary` | `neutral` | `subtle`
+- Sizes: `medium` | `small`
+- CTA utama pakai `--kompak-accent` atau `--kompak-primary`
+
+## Map pins
+
+- Koperasi: `--kompak-pin-coop` (#0F595E)
+- Produsen: `--kompak-pin-producer` (#C48A2A)
+- Komunitas: `--kompak-pin-community` (#8CAE3E)
+
+## Layout
+
+- Styling: inline style + CSS variables, atau Tailwind utility yang sudah ada
+- Jangan tambah library UI baru (shadcn, Vuetify, dll.) tanpa alasan kuat
+- Desktop: sidebar collapsible (60px collapsed / 220px expanded)
+- Mobile: bottom nav, bukan sidebar
+
+## Contoh
+
+```vue
+<div :style="{ padding: 'var(--space-xl)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }">
+```

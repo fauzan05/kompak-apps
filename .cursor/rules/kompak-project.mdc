@@ -1,0 +1,43 @@
+---
+description: KOMPAK Apps — stack, arsitektur, dan larangan umum
+alwaysApply: true
+---
+
+# KOMPAK Apps — Project Overview
+
+## Stack
+
+- Vue 3.5 Composition API + Vite 6 + TypeScript + Tailwind 4
+- Leaflet + leaflet.markercluster (imperatif, bukan react-leaflet)
+- Ikon: `lucide-vue-next`
+
+## Entry & shell
+
+- Entry: `src/main.ts` → `src/App.vue`
+- Navigasi: view-switcher via `ref` di App — **bukan** Vue Router
+- Views: `home` | `map` | `producer-dashboard` | `coop-dashboard` | `add-product` | `entity-detail`
+- Navigasi antar view: `emit('navigate', view, data?)`
+
+## Struktur folder
+
+```
+src/
+  App.vue              # shell + sidebar + view switcher
+  components/          # halaman fitur (LandingPage, MapView, …)
+  components/ui/     # primitif UI (Button, Tabs, Sidebar*, …)
+  composables/         # logic reusable (useInView, …)
+  styles/              # globals.css tokens, tailwind, fonts
+```
+
+## Import
+
+- Alias `@/` → `src/` (contoh: `import { Button } from '@/components/ui'`)
+
+## Larangan
+
+- Jangan reintroduksi React, `@figma/astraui*`, atau dependency React boilerplate
+- Jangan tambah Vue Router/Pinia kecuali diminta eksplisit
+
+## Konten
+
+- Copy UI dalam Bahasa Indonesia

@@ -1,0 +1,49 @@
+---
+description: Pola Vue SFC dan TypeScript untuk KOMPAK
+globs: "**/*.{vue,ts}"
+alwaysApply: false
+---
+
+# Vue SFC Conventions
+
+## Komponen
+
+- Selalu `<script setup lang="ts">`
+- Halaman fitur di `src/components/*.vue`; primitif di `src/components/ui/`
+- Composable baru di `src/composables/use*.ts`
+
+## Props & emits
+
+```vue
+const props = withDefaults(defineProps<{ isExpanded?: boolean }>(), { isExpanded: true })
+const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
+```
+
+- Hindari nama prop yang bentrok atribut HTML (`isExpanded` bukan `expanded`)
+- Props class pakai `className`, bukan `class`
+
+## State
+
+- `ref` / `reactive` / `computed` untuk state lokal
+- Jangan tambah Pinia tanpa diminta
+
+## UI kit
+
+- Impor dari `@/components/ui`: Button, Tabs, InputField, SidebarNavigation, dll.
+- Button pakai slot `#iconStart` / `#iconEnd`
+
+## Ikon
+
+- Hanya `lucide-vue-next`; dynamic icon via `<component :is="icon" />`
+
+## Map (Leaflet)
+
+- Imperatif di `onMounted`, cleanup di `onUnmounted`
+- Import CSS: `leaflet/dist/leaflet.css`, markercluster CSS
+- Jangan pakai react-leaflet atau @vue-leaflet
+
+## Sidebar collapsible
+
+- State `sidebarExpanded` di App.vue
+- Persist: `localStorage` key `kompak-sidebar-expanded`
+- Prop ke SidebarNavigation: `:is-expanded="sidebarExpanded"`
