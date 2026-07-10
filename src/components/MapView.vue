@@ -114,9 +114,9 @@ function generateEntities(city: City): PinData[] {
     const type = types[s % 3]
     const lat = city.lat + ((s % 100) / 100 - 0.5) * 0.14
     const lng = city.lng + (((s >> 3) % 100) / 100 - 0.5) * 0.14
-    const c1 = COMMODITY_POOL[s % COMMODITY_POOL.length]
-    const c2 = COMMODITY_POOL[(s >> 5) % COMMODITY_POOL.length]
-    const commodities = c1 === c2 ? [c1] : [c1, c2]
+    const c1 = COMMODITY_POOL[s % COMMODITY_POOL.length] ?? ''
+    const c2 = COMMODITY_POOL[(s >> 5) % COMMODITY_POOL.length] ?? ''
+    const commodities = (c1 === c2 ? [c1] : [c1, c2]).filter(Boolean)
     const verified = s % 3 !== 0
     const km = haversineKm(USER_LOCATION, [lat, lng])
     let name: string
@@ -208,8 +208,11 @@ const filteredPins = computed(() => allPins.filter((p) => {
   const filterMap: Record<string, string> = {
     'gula-aren': 'Gula Aren', kopi: 'Kopi', beras: 'Beras', madu: 'Madu', sayur: 'Sayuran', buah: 'Buah', ikan: 'Ikan',
   }
-  const keyword = filterMap[activeFilter.value] || ''
-  return p.commodities.some((c) => c.toLowerCase().includes(keyword.toLowerCase()))
+  const keyword = filterMap[activeFilter.value]
+  if (!keyword) return true
+  return (p.commodities ?? []).some(
+    (c) => typeof c === 'string' && c.toLowerCase().includes(keyword.toLowerCase()),
+  )
 }))
 
 const citySuggestions = computed(() => {
