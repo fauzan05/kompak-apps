@@ -24,6 +24,19 @@ export function formatRupiah(n: number): string {
   return `Rp ${Math.round(n).toLocaleString('id-ID')}`
 }
 
+/** Perkiraan bounding box untuk filter koordinat sebelum haversine. */
+export function bboxForRadius(lat: number, lng: number, radiusKm: number) {
+  const deltaLat = radiusKm / 111
+  const cosLat = Math.cos((lat * Math.PI) / 180)
+  const deltaLng = radiusKm / (111 * Math.max(0.1, Math.abs(cosLat)))
+  return {
+    minLat: lat - deltaLat,
+    maxLat: lat + deltaLat,
+    minLng: lng - deltaLng,
+    maxLng: lng + deltaLng,
+  }
+}
+
 export const COMMODITY_KEYWORDS: Record<string, string> = {
   'gula-aren': 'Gula Aren',
   kopi: 'Kopi',

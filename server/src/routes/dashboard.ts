@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { sql, DEMO_COOP_ID, DEMO_PRODUCER_ID } from '../db.js'
-import { formatDistance, formatRupiah, haversineKm, parseCoords } from '../utils.js'
+import { formatDistance, formatRupiah, haversineKm, parseCoords, bboxForRadius } from '../utils.js'
 
 export const dashboardRoute = new Hono()
 
@@ -177,47 +177,32 @@ dashboardRoute.get('/coop/:id', async (c) => {
   const queryLng = Number(c.req.query('lng'))
   const hasUserCoords = Number.isFinite(queryLat) && Number.isFinite(queryLng)
   const searchOrigin: [number, number] = hasUserCoords ? [queryLat, queryLng] : origin
+  const bbox = bboxForRadius(searchOrigin[0], searchOrigin[1], radiusKm)
 
-  const producers = commodityFilter
-    ? await sql<{
-        id: string
-        name: string
-        type: string
-        commodity: string
-        qty: number
-        coords: string
-        verified: boolean
-        price: number
-      }[]>`
-        SELECT e.entitas_ref AS id, e.nama AS name, e.tipe AS type,
-          pk.nama_komoditas AS commodity, pk.jumlah AS qty,
-          e.koordinat_dibulatkan AS coords, e.verified, pk.harga AS price
-        FROM entitas_komoditas e
-        JOIN penawaran_komoditas pk ON pk.entitas_ref = e.entitas_ref
-        WHERE pk.status = 'aktif'
-          AND pk.nama_komoditas ILIKE ${'%' + commodityFilter + '%'}
-        ORDER BY e.rating DESC NULLS LAST
-        LIMIT 80
-      `
-    : await sql<{
-        id: string
-        name: string
-        type: string
-        commodity: string
-        qty: number
-        coords: string
-        verified: boolean
-        price: number
-      }[]>`
-        SELECT e.entitas_ref AS id, e.nama AS name, e.tipe AS type,
-          pk.nama_komoditas AS commodity, pk.jumlah AS qty,
-          e.koordinat_dibulatkan AS coords, e.verified, pk.harga AS price
-        FROM entitas_komoditas e
-        JOIN penawaran_komoditas pk ON pk.entitas_ref = e.entitas_ref
-        WHERE pk.status = 'aktif'
-        ORDER BY e.rating DESC NULLS LAST
-        LIMIT 80
-      `
+  const producers = await sql<{
+    id: string
+    name: string
+    type: string
+    commodity: string
+    qty: number
+    coords: string
+    verified: boolean
+    price: number
+  }[]>`
+    SELECT e.entitas_ref AS id, e.nama AS name, e.tipe AS type,
+      pk.nama_komoditas AS commodity, pk.jumlah AS qty,
+      e.koordinat_dibulatkan AS coords, e.verified, pk.harga AS price
+    FROM entitas_komoditas e
+    JOIN penawaran_komoditas pk ON pk.entitas_ref = e.entitas_ref
+    WHERE pk.status = 'aktif'
+      AND e.koordinat_dibulatkan IS NOT NULL
+      AND trim(e.koordinat_dibulatkan) <> ''
+      AND trim(split_part(e.koordinat_dibulatkan, ',', 1))::float BETWEEN ${bbox.minLat} AND ${bbox.maxLat}
+      AND trim(split_part(e.koordinat_dibulatkan, ',', 2))::float BETWEEN ${bbox.minLng} AND ${bbox.maxLng}
+      AND (${commodityFilter} = '' OR pk.nama_komoditas ILIKE ${'%' + commodityFilter + '%'})
+    ORDER BY e.rating DESC NULLS LAST
+    LIMIT 200
+  `
 
   function matchesActiveNeed(commodity: string): boolean {
     const cLower = commodity.toLowerCase()

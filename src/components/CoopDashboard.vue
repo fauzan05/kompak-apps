@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from 'vue'
+import { computed, onMounted, ref, type Component } from 'vue'
 import { Button, Tabs } from '@/components/ui'
 import {
   Sprout, Users, MapPin, Plus, Bell, Clock, ChevronRight, Package, Truck,
@@ -36,6 +36,8 @@ const orders = ref<CoopDashboardData['orders']>([])
 const filterCommodity = ref('')
 const filterRadius = ref<number>(50)
 const showFilterPanel = ref(false)
+const searchFromGps = ref(false)
+let loadSeq = 0
 
 const commodityOptions = computed(() => {
   const fromNeeds = activeNeeds.value.map((n) => n.commodity)
@@ -45,11 +47,12 @@ const commodityOptions = computed(() => {
 
 const filterLabel = computed(() => {
   const commodity = filterCommodity.value || 'Semua komoditas'
-  const from = geo.usingGps.value ? 'lokasi Anda' : 'koperasi'
+  const from = searchFromGps.value ? 'lokasi Anda' : 'koperasi'
   return `${commodity} · ${filterRadius.value} km · ${from}`
 })
 
 async function loadDashboard(pasokanOnly = false) {
+  const seq = ++loadSeq
   if (pasokanOnly) pasokanLoading.value = true
   else loading.value = true
 
@@ -57,9 +60,10 @@ async function loadDashboard(pasokanOnly = false) {
     const data = await fetchCoopDashboard(DEMO_COOP_ID, {
       commodity: filterCommodity.value || undefined,
       radiusKm: filterRadius.value,
-      lat: geo.usingGps.value ? geo.lat.value : undefined,
-      lng: geo.usingGps.value ? geo.lng.value : undefined,
+      lat: searchFromGps.value ? geo.lat.value : undefined,
+      lng: searchFromGps.value ? geo.lng.value : undefined,
     })
+    if (seq !== loadSeq) return
     title.value = data.title
     location.value = data.location
     stats.value = [
@@ -82,22 +86,21 @@ async function loadDashboard(pasokanOnly = false) {
 }
 
 onMounted(async () => {
-  geo.init()
   await loadDashboard()
-  if (activeNeeds.value[0]?.commodity) {
-    filterCommodity.value = activeNeeds.value[0].commodity
-    await loadDashboard(true)
-  }
 })
 
 async function refreshGps() {
+  if (searchFromGps.value) {
+    searchFromGps.value = false
+    await loadDashboard(true)
+    return
+  }
   const ok = await geo.requestLocation()
-  if (ok) await loadDashboard(true)
+  if (ok) {
+    searchFromGps.value = true
+    await loadDashboard(true)
+  }
 }
-
-watch(geo.usingGps, async (active) => {
-  if (active) await loadDashboard(true)
-})
 
 function applyFilters() {
   showFilterPanel.value = false
@@ -412,9 +415,15 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                   <Filter :size="14" color="var(--kompak-text-muted)" />
                   <span>{{ filterLabel }}</span>
                 </button>
-                <Button variant="neutral" size="small" @click="refreshGps" :title="geo.usingGps.value ? 'Perbarui lokasi GPS' : 'Aktifkan GPS'">
+                <Button
+                  variant="neutral"
+                  size="small"
+                  @click="refreshGps"
+                  :title="searchFromGps ? 'Kembali ke lokasi koperasi' : 'Cari dari lokasi GPS Anda'"
+                  :style="searchFromGps ? { borderColor: 'var(--kompak-primary)', color: 'var(--kompak-primary)' } : {}"
+                >
                   <template #iconStart><MapPin :size="14" /></template>
-                  GPS
+                  {{ searchFromGps ? 'Lokasi Koperasi' : 'GPS' }}
                 </Button>
                 <Button variant="neutral" size="small" @click="showFilterPanel = !showFilterPanel">
                   <template #iconStart><Filter :size="14" /></template>
