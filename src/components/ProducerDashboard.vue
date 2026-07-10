@@ -477,6 +477,30 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
               <div :style="{ flex: 1, minWidth: 0 }">
                 <div :style="{ fontSize: '13px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ tx.koperasi }}</div>
                 <div :style="{ fontSize: '11px', color: 'var(--kompak-text-muted)', marginTop: '2px' }">{{ tx.qty }} · {{ tx.date }}</div>
+                <div v-if="tx.payLabel || tx.shipLabel" :style="{ display: 'flex', gap: '4px', marginTop: 6, flexWrap: 'wrap' }">
+                  <span
+                    v-if="tx.payLabel"
+                    :style="{
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      background: tx.payStatus === 'lunas' ? 'var(--kompak-verified-bg)' : 'var(--kompak-pending-bg)',
+                      color: tx.payStatus === 'lunas' ? 'var(--kompak-verified)' : 'var(--kompak-accent)',
+                    }"
+                  >{{ tx.payLabel }}</span>
+                  <span
+                    v-if="tx.shipLabel"
+                    :style="{
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      background: 'var(--kompak-surface-muted)',
+                      color: 'var(--kompak-text-muted)',
+                    }"
+                  >{{ tx.shipLabel }}</span>
+                </div>
               </div>
               <div :style="{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }">
                 <span :style="{ fontSize: '13px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ tx.value }}</span>

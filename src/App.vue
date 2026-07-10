@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { Home, Map, Settings, Sprout, Store, Leaf } from 'lucide-vue-next'
+import { Home, Map, Settings, Sprout, Store, Leaf, Building2 } from 'lucide-vue-next'
 import {
   ThemeProvider,
   SidebarNavigation,
@@ -13,6 +13,7 @@ import ProducerDashboard from '@/components/ProducerDashboard.vue'
 import CoopDashboard from '@/components/CoopDashboard.vue'
 import AddProductForm from '@/components/AddProductForm.vue'
 import EntityDetail from '@/components/EntityDetail.vue'
+import OfftakerDashboard from '@/components/OfftakerDashboard.vue'
 import { useGeolocation } from '@/composables/useGeolocation'
 
 const geo = useGeolocation()
@@ -23,6 +24,7 @@ type View =
   | 'map'
   | 'producer-dashboard'
   | 'coop-dashboard'
+  | 'offtaker-dashboard'
   | 'add-product'
   | 'entity-detail'
 
@@ -43,6 +45,7 @@ const primaryNav = [
   { id: 'map', icon: Map, label: 'Peta Komoditas', view: 'map' as View },
   { id: 'producer', icon: Sprout, label: 'Dashboard Produsen', view: 'producer-dashboard' as View },
   { id: 'coop', icon: Store, label: 'Dashboard Koperasi', view: 'coop-dashboard' as View },
+  { id: 'offtaker', icon: Building2, label: 'Dashboard Offtaker', view: 'offtaker-dashboard' as View },
 ]
 
 const mobileNav = [
@@ -50,6 +53,7 @@ const mobileNav = [
   { id: 'map', icon: Map, label: 'Peta', view: 'map' as View },
   { id: 'producer', icon: Sprout, label: 'Produsen', view: 'producer-dashboard' as View },
   { id: 'coop', icon: Store, label: 'Koperasi', view: 'coop-dashboard' as View },
+  { id: 'offtaker', icon: Building2, label: 'Offtaker', view: 'offtaker-dashboard' as View },
 ]
 
 const activeView = ref<View>('home')
@@ -76,6 +80,7 @@ function isNavActive(navId: string) {
   if (navId === 'map') return activeView.value === 'map' || activeView.value === 'entity-detail'
   if (navId === 'producer') return activeView.value === 'producer-dashboard' || activeView.value === 'add-product'
   if (navId === 'coop') return activeView.value === 'coop-dashboard'
+  if (navId === 'offtaker') return activeView.value === 'offtaker-dashboard'
   return false
 }
 </script>
@@ -181,6 +186,7 @@ function isNavActive(navId: string) {
           <MapView v-else-if="activeView === 'map'" @navigate="navigate" />
           <ProducerDashboard v-else-if="activeView === 'producer-dashboard'" @navigate="navigate" />
           <CoopDashboard v-else-if="activeView === 'coop-dashboard'" @navigate="navigate" />
+          <OfftakerDashboard v-else-if="activeView === 'offtaker-dashboard'" @navigate="navigate" />
           <AddProductForm v-else-if="activeView === 'add-product'" @navigate="navigate" />
           <EntityDetail
             v-else-if="activeView === 'entity-detail'"

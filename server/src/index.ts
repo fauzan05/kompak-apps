@@ -11,6 +11,7 @@ import { dashboardRoute } from './routes/dashboard.js'
 import { productsRoute } from './routes/products.js'
 import { offersRoute } from './routes/offers.js'
 import { ordersRoute } from './routes/orders.js'
+import { offtakerRoute } from './routes/offtaker.js'
 
 config({ path: resolve(process.cwd(), '../.env') })
 config()
@@ -29,6 +30,7 @@ app.route('/api/dashboard', dashboardRoute)
 app.route('/api/products', productsRoute)
 app.route('/api/offers', offersRoute)
 app.route('/api/orders', ordersRoute)
+app.route('/api/offtaker', offtakerRoute)
 
 const port = Number(process.env.API_PORT || 3001)
 

@@ -72,7 +72,18 @@ export interface ProducerDashboardData {
     activeNeed: string
   }[]
   products: { name: string; qty: string; price: string; status: string }[]
-  transactions: { koperasi: string; qty: string; date: string; value: string; status: string }[]
+  transactions: {
+    id: string
+    koperasi: string
+    qty: string
+    date: string
+    value: string
+    payStatus: string
+    payLabel: string
+    shipStatus: string
+    shipLabel: string
+    status: string
+  }[]
 }
 
 export interface CoopDashboardData {
@@ -99,7 +110,64 @@ export interface CoopDashboardData {
     matchScore: number
     price: string
   }[]
-  orders: { id: string; supplier: string; commodity: string; qty: string; status: string; date: string }[]
+  orders: {
+    id: string
+    supplier: string
+    commodity: string
+    qty: string
+    status: string
+    payStatus: string
+    payLabel: string
+    value: string
+    arah: string
+    date: string
+  }[]
+  surplus: { id: string; commodity: string; qty: string; price: string }[]
+  rfqs: {
+    id: string
+    offtakerName: string
+    commodity: string
+    qty: string
+    status: string
+    statusLabel: string
+    date: string
+    note: string | null
+  }[]
+}
+
+export interface OfftakerDashboardData {
+  greeting: string
+  company: string
+  surplus: {
+    id: string
+    koperasiName: string
+    koperasiRef: string
+    commodity: string
+    qty: string
+    price: string
+    location: string
+  }[]
+  rfqs: {
+    id: string
+    koperasiName: string
+    commodity: string
+    qty: string
+    status: string
+    statusLabel: string
+    date: string
+  }[]
+  transactions: {
+    id: string
+    koperasi: string
+    commodity: string
+    qty: string
+    value: string
+    payStatus: string
+    payLabel: string
+    shipStatus: string
+    shipLabel: string
+    date: string
+  }[]
 }
 
 export interface CitySuggestion {

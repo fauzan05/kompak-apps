@@ -90,13 +90,23 @@ dashboardRoute.get('/producer/:id', async (c) => {
     }
   })
 
-  const transactions = await sql<{ koperasi: string; qty: string; date: string; value: string; status: string }[]>`
+  const transactions = await sql<{
+    id: string
+    koperasi: string
+    qty: string
+    date: string
+    value: string
+    payStatus: string
+    shipStatus: string
+  }[]>`
     SELECT
+      t.transaksi_ref AS id,
       coalesce(p.nama_koperasi, 'Koperasi') AS koperasi,
       t.jumlah::text || ' kg ' || t.nama_komoditas AS qty,
       to_char(t.tanggal, 'DD Mon YYYY') AS date,
-      t.nilai::text AS value,
-      t.status
+      coalesce(t.nilai::text, '0') AS value,
+      coalesce(t.status_bayar, 'belum') AS "payStatus",
+      coalesce(t.status_kirim, t.status, 'dijadwalkan') AS "shipStatus"
     FROM transaksi_kompak t
     LEFT JOIN profil_koperasi p ON p.koperasi_ref = t.koperasi_ref
     WHERE t.entitas_ref = ${id}
@@ -104,9 +114,18 @@ dashboardRoute.get('/producer/:id', async (c) => {
     LIMIT 8
   `
   const txMapped = transactions.map((t) => ({
-    ...t,
+    id: t.id,
+    koperasi: t.koperasi,
+    qty: t.qty,
+    date: t.date,
     value: formatRupiah(Number(t.value)),
-    status: t.status === 'selesai' ? 'Selesai' : 'Diproses',
+    payStatus: t.payStatus,
+    payLabel: t.payStatus === 'lunas' ? 'Lunas' : 'Belum bayar',
+    shipStatus: t.shipStatus,
+    shipLabel:
+      t.shipStatus === 'selesai' ? 'Selesai' : t.shipStatus === 'dalam-perjalanan' ? 'Dikirim' : 'Dijadwalkan',
+    status:
+      t.shipStatus === 'selesai' ? 'Selesai' : 'Diproses',
   }))
 
   return c.json({
@@ -143,7 +162,7 @@ dashboardRoute.get('/coop/:id', async (c) => {
   const [counts] = await sql<{ needs: number; orders: number; producers: number; tx: number }[]>`
     SELECT
       (SELECT count(*)::int FROM kebutuhan_koperasi WHERE koperasi_ref = ${id} AND status = 'aktif') AS needs,
-      (SELECT count(*)::int FROM transaksi_kompak WHERE koperasi_ref = ${id} AND status IN ('dijadwalkan', 'dalam-perjalanan')) AS orders,
+      (SELECT count(*)::int FROM transaksi_kompak WHERE koperasi_ref = ${id} AND coalesce(status_kirim, status) IN ('dijadwalkan', 'dalam-perjalanan')) AS orders,
       (SELECT count(*)::int FROM entitas_komoditas) AS producers,
       (SELECT count(*)::int FROM transaksi_kompak WHERE koperasi_ref = ${id} AND status = 'selesai' AND tanggal >= date_trunc('month', current_date)) AS tx
   `
@@ -236,20 +255,92 @@ dashboardRoute.get('/coop/:id', async (c) => {
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 12)
 
-  const orders = await sql<{ id: string; supplier: string; commodity: string; qty: string; status: string; date: string }[]>`
+  const orders = await sql<{
+    id: string
+    supplier: string
+    commodity: string
+    qty: string
+    status: string
+    payStatus: string
+    value: string
+    arah: string
+    date: string
+  }[]>`
     SELECT
       tk.transaksi_ref AS id,
-      coalesce(e.nama, 'Pemasok') AS supplier,
+      CASE WHEN tk.arah = 'offtaker_koperasi' THEN coalesce(of.nama, 'Offtaker')
+           ELSE coalesce(e.nama, 'Pemasok') END AS supplier,
       tk.nama_komoditas AS commodity,
       tk.jumlah::text || ' kg' AS qty,
-      tk.status AS status,
+      coalesce(tk.status_kirim, tk.status, 'dijadwalkan') AS status,
+      coalesce(tk.status_bayar, 'belum') AS "payStatus",
+      coalesce(tk.nilai::text, '0') AS value,
+      coalesce(tk.arah, 'produsen_koperasi') AS arah,
       to_char(tk.tanggal, 'DD Mon YYYY') AS date
     FROM transaksi_kompak tk
     LEFT JOIN entitas_komoditas e ON e.entitas_ref = tk.entitas_ref
+    LEFT JOIN offtaker of ON of.offtaker_ref = tk.offtaker_ref
     WHERE tk.koperasi_ref = ${id}
     ORDER BY tk.tanggal DESC NULLS LAST, tk.dibuat_pada DESC NULLS LAST
     LIMIT 20
   `
+
+  const surplus = await sql<{
+    id: string
+    commodity: string
+    qty: string
+    price: string
+  }[]>`
+    SELECT
+      surplus_ref AS id,
+      nama_komoditas AS commodity,
+      jumlah::text || ' ' || satuan AS qty,
+      coalesce(harga::text, '0') AS price
+    FROM stok_surplus_koperasi
+    WHERE koperasi_ref = ${id} AND status = 'aktif'
+    ORDER BY dibuat_pada DESC
+    LIMIT 10
+  `
+
+  const rfqs = await sql<{
+    id: string
+    offtakerName: string
+    commodity: string
+    qty: string
+    status: string
+    date: string
+    note: string | null
+  }[]>`
+    SELECT
+      r.rfq_ref AS id,
+      o.nama AS "offtakerName",
+      r.nama_komoditas AS commodity,
+      r.jumlah::text || ' ' || r.satuan AS qty,
+      r.status,
+      to_char(r.dibuat_pada, 'DD Mon YYYY HH24:MI') AS date,
+      r.catatan AS note
+    FROM rfq_offtaker r
+    JOIN offtaker o ON o.offtaker_ref = r.offtaker_ref
+    WHERE r.koperasi_ref = ${id}
+    ORDER BY r.dibuat_pada DESC
+    LIMIT 15
+  `
+
+  const ordersMapped = orders.map((o) => ({
+    ...o,
+    value: formatRupiah(Number(o.value)),
+    payLabel: o.payStatus === 'lunas' ? 'Lunas' : 'Belum bayar',
+  }))
+
+  const surplusMapped = surplus.map((s) => ({
+    ...s,
+    price: Number(s.price) > 0 ? formatRupiah(Number(s.price)) + '/kg' : '—',
+  }))
+
+  const rfqsMapped = rfqs.map((r) => ({
+    ...r,
+    statusLabel: r.status === 'diajukan' ? 'Menunggu' : r.status === 'diterima' ? 'Diterima' : r.status,
+  }))
 
   return c.json({
     title: coop.name,
@@ -262,6 +353,8 @@ dashboardRoute.get('/coop/:id', async (c) => {
     ],
     activeNeeds,
     producers: producersMapped,
-    orders,
+    orders: ordersMapped,
+    surplus: surplusMapped,
+    rfqs: rfqsMapped,
   })
 })

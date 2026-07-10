@@ -100,3 +100,12 @@ JOIN profil_koperasi p ON p.koordinat_dibulatkan IS NOT NULL
 WHERE e.entitas_ref = 'ENT-DEMO-PRODUCER-001'
    OR (abs(hashtext(e.entitas_ref || p.koperasi_ref)) % 40) = 0
 LIMIT 120;
+
+-- Demo offtaker & stok surplus
+INSERT INTO offtaker (offtaker_ref, nama, perusahaan, telepon)
+VALUES ('OFT-DEMO-001', 'PT Nusantara Food', 'Nusantara Food Trading', '021-5550123')
+ON CONFLICT (offtaker_ref) DO NOTHING;
+
+INSERT INTO stok_surplus_koperasi (surplus_ref, koperasi_ref, nama_komoditas, jumlah, satuan, harga, status)
+VALUES ('SPL-DEMO-001', 'KOP-02AFA0134DB2', 'Gula Aren', 500, 'kg', 17000, 'aktif')
+ON CONFLICT (surplus_ref) DO NOTHING;

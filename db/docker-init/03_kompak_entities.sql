@@ -42,12 +42,53 @@ CREATE TABLE transaksi_kompak (
     transaksi_ref   text NOT NULL PRIMARY KEY,
     entitas_ref     text REFERENCES entitas_komoditas (entitas_ref),
     koperasi_ref    text REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    respon_ref      text REFERENCES respon_penawaran (respon_ref),
+    arah            text DEFAULT 'produsen_koperasi' CHECK (arah IN ('produsen_koperasi', 'offtaker_koperasi')),
+    offtaker_ref    text,
+    rfq_ref         text,
     nama_komoditas  text,
     jumlah          numeric,
     nilai           numeric,
-    status          text DEFAULT 'selesai',
+    status          text DEFAULT 'dijadwalkan',
+    status_deal     text DEFAULT 'disepakati',
+    status_bayar    text DEFAULT 'belum',
+    status_kirim    text DEFAULT 'dijadwalkan',
+    metode_bayar    text,
     tanggal         date,
+    dibayar_pada    timestamp,
     dibuat_pada     timestamp DEFAULT now()
+);
+
+CREATE TABLE offtaker (
+    offtaker_ref   text NOT NULL PRIMARY KEY,
+    nama           text NOT NULL,
+    perusahaan     text,
+    telepon        text,
+    dibuat_pada    timestamp DEFAULT now()
+);
+
+CREATE TABLE stok_surplus_koperasi (
+    surplus_ref    text NOT NULL PRIMARY KEY,
+    koperasi_ref   text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    nama_komoditas text NOT NULL,
+    jumlah         numeric NOT NULL,
+    satuan         text DEFAULT 'kg',
+    harga          numeric,
+    status         text DEFAULT 'aktif',
+    dibuat_pada    timestamp DEFAULT now()
+);
+
+CREATE TABLE rfq_offtaker (
+    rfq_ref        text NOT NULL PRIMARY KEY,
+    offtaker_ref   text NOT NULL REFERENCES offtaker (offtaker_ref),
+    koperasi_ref   text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    surplus_ref    text REFERENCES stok_surplus_koperasi (surplus_ref),
+    nama_komoditas text NOT NULL,
+    jumlah         numeric NOT NULL,
+    satuan         text DEFAULT 'kg',
+    catatan        text,
+    status         text DEFAULT 'diajukan',
+    dibuat_pada    timestamp DEFAULT now()
 );
 
 CREATE TABLE respon_penawaran (
@@ -72,3 +113,5 @@ CREATE INDEX idx_kebutuhan_koperasi_ref ON kebutuhan_koperasi (koperasi_ref);
 CREATE INDEX idx_transaksi_kompak_entitas ON transaksi_kompak (entitas_ref);
 CREATE INDEX idx_respon_penawaran_kebutuhan ON respon_penawaran (kebutuhan_ref);
 CREATE INDEX idx_respon_penawaran_koperasi ON respon_penawaran (koperasi_ref);
+CREATE INDEX idx_surplus_koperasi ON stok_surplus_koperasi (koperasi_ref);
+CREATE INDEX idx_rfq_koperasi ON rfq_offtaker (koperasi_ref);

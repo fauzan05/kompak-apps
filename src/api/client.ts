@@ -6,6 +6,7 @@ import type {
   LandingStat,
   MapPin,
   OfferResponse,
+  OfftakerDashboardData,
   ProducerCard,
   ProducerDashboardData,
 } from './types'
@@ -46,6 +47,7 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
 
 export const DEMO_PRODUCER_ID = import.meta.env.VITE_DEMO_PRODUCER_ID || 'ENT-DEMO-PRODUCER-001'
 export const DEMO_COOP_ID = import.meta.env.VITE_DEMO_COOP_ID || 'KOP-02AFA0134DB2'
+export const DEMO_OFFTAKER_ID = import.meta.env.VITE_DEMO_OFFTAKER_ID || 'OFT-DEMO-001'
 
 export function fetchStats() {
   return getJson<{ stats: LandingStat[] }>('/stats').then((r) => r.stats)
@@ -136,4 +138,45 @@ export function scheduleOrder(payload: {
 
 export function updateOrderStatus(id: string, status: 'dalam-perjalanan' | 'selesai') {
   return patchJson<{ ok: boolean; transaksiRef: string; status: string }>(`/orders/${id}`, { status })
+}
+
+export function acceptOffer(responRef: string) {
+  return postJson<{ ok: boolean; transaksiRef: string }>(`/offers/${responRef}/accept`, {})
+}
+
+export function simulatePayment(id: string, metode: string) {
+  return postJson<{ ok: boolean; transaksiRef: string; statusBayar: string; metode: string }>(
+    `/orders/${id}/pay-simulate`,
+    { metode },
+  )
+}
+
+export function fetchOfftakerDashboard(id = DEMO_OFFTAKER_ID) {
+  return getJson<OfftakerDashboardData>(`/offtaker/dashboard/${id}`)
+}
+
+export function submitRfq(payload: {
+  koperasiRef: string
+  surplusRef?: string
+  namaKomoditas: string
+  jumlah: number
+  satuan?: string
+  catatan?: string
+  offtakerRef?: string
+}) {
+  return postJson<{ ok: boolean; rfqRef: string }>('/offtaker/rfq', payload)
+}
+
+export function publishSurplus(payload: {
+  namaKomoditas: string
+  jumlah: number
+  satuan?: string
+  harga?: number
+  koperasiRef?: string
+}) {
+  return postJson<{ ok: boolean; surplusRef: string }>('/offtaker/surplus', payload)
+}
+
+export function acceptRfq(rfqRef: string) {
+  return postJson<{ ok: boolean; transaksiRef: string }>(`/offtaker/rfq/${rfqRef}/accept`, {})
 }

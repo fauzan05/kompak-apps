@@ -155,3 +155,61 @@ offersRoute.get('/', async (c) => {
 
   return c.json({ offers })
 })
+
+offersRoute.post('/:id/accept', async (c) => {
+  const responRef = c.req.param('id')
+
+  const [offer] = await sql<{
+    respon_ref: string
+    entitas_ref: string
+    koperasi_ref: string
+    nama_komoditas: string
+    jumlah: number
+    harga: number | null
+    status: string
+  }[]>`
+    SELECT respon_ref, entitas_ref, koperasi_ref, nama_komoditas, jumlah, harga, status
+    FROM respon_penawaran WHERE respon_ref = ${responRef}
+  `
+  if (!offer) return c.json({ error: 'Penawaran tidak ditemukan' }, 404)
+  if (offer.status === 'diterima') return c.json({ error: 'Penawaran sudah diterima' }, 400)
+
+  const [existingTx] = await sql<{ transaksi_ref: string }[]>`
+    SELECT transaksi_ref FROM transaksi_kompak WHERE respon_ref = ${responRef} LIMIT 1
+  `
+  if (existingTx) {
+    return c.json({ ok: true, transaksiRef: existingTx.transaksi_ref, alreadyExists: true })
+  }
+
+  const nilai = offer.harga ? Number(offer.jumlah) * Number(offer.harga) : null
+  const transaksiRef = `TXK-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`
+
+  await sql`
+    INSERT INTO transaksi_kompak (
+      transaksi_ref, entitas_ref, koperasi_ref, respon_ref, arah,
+      nama_komoditas, jumlah, nilai, status, status_deal, status_bayar, status_kirim, tanggal
+    )
+    VALUES (
+      ${transaksiRef},
+      ${offer.entitas_ref},
+      ${offer.koperasi_ref},
+      ${responRef},
+      'produsen_koperasi',
+      ${offer.nama_komoditas},
+      ${offer.jumlah},
+      ${nilai},
+      'dijadwalkan',
+      'disepakati',
+      'belum',
+      'dijadwalkan',
+      current_date
+    )
+  `
+
+  await sql`
+    UPDATE respon_penawaran SET status = 'diterima', diperbarui_pada = now()
+    WHERE respon_ref = ${responRef}
+  `
+
+  return c.json({ ok: true, transaksiRef }, 201)
+})

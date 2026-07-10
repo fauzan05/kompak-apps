@@ -3,11 +3,15 @@ import { computed, onMounted, ref, type Component } from 'vue'
 import { Button, Tabs } from '@/components/ui'
 import {
   Sprout, Users, MapPin, Plus, Bell, Clock, ChevronRight, Package, Truck,
-  CheckCircle, AlertCircle, Filter, Handshake, Search,
+  CheckCircle, AlertCircle, Filter, Handshake, Search, Wallet, Building2,
 } from 'lucide-vue-next'
-import { DEMO_COOP_ID, fetchCoopDashboard, fetchOffers, scheduleOrder, updateOrderStatus } from '@/api/client'
+import {
+  DEMO_COOP_ID, acceptOffer, acceptRfq, fetchCoopDashboard, fetchOffers,
+  publishSurplus, scheduleOrder, updateOrderStatus,
+} from '@/api/client'
 import type { CoopDashboardData, OfferResponse } from '@/api/types'
 import { useGeolocation } from '@/composables/useGeolocation'
+import PaySimulateModal from '@/components/PaySimulateModal.vue'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
@@ -32,6 +36,14 @@ const stats = ref<{ label: string; value: string; icon: Component; color: string
 const activeNeeds = ref<CoopDashboardData['activeNeeds']>([])
 const producers = ref<CoopDashboardData['producers']>([])
 const orders = ref<CoopDashboardData['orders']>([])
+const surplusList = ref<CoopDashboardData['surplus']>([])
+const rfqList = ref<CoopDashboardData['rfqs']>([])
+const acceptingOfferId = ref('')
+const acceptingRfqId = ref('')
+const publishingSurplus = ref(false)
+const surplusForm = ref({ commodity: 'Gula Aren', qty: '100', price: '17000' })
+const payOpen = ref(false)
+const payOrder = ref<CoopDashboardData['orders'][number] | null>(null)
 
 const filterCommodity = ref('')
 const filterRadius = ref<number>(50)
@@ -76,6 +88,8 @@ async function loadDashboard(pasokanOnly = false) {
     needsList.value = data.activeNeeds
     producers.value = data.producers
     orders.value = data.orders
+    surplusList.value = data.surplus || []
+    rfqList.value = data.rfqs || []
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Gagal memuat dashboard'
@@ -182,6 +196,70 @@ async function advanceOrder(order: CoopDashboardData['orders'][number]) {
   }
 }
 
+async function acceptOfferResponse(resp: OfferResponse) {
+  acceptingOfferId.value = resp.id
+  try {
+    await acceptOffer(resp.id)
+    orderMessage.value = `Penawaran dari ${resp.producerName} diterima. Transaksi dibuat.`
+    await loadDashboard()
+    if (expandedNeedId.value) {
+      responsesByNeed.value[expandedNeedId.value] = await fetchOffers({ kebutuhanRef: expandedNeedId.value })
+    }
+  } catch (e) {
+    orderMessage.value = e instanceof Error ? e.message : 'Gagal menerima penawaran'
+  } finally {
+    acceptingOfferId.value = ''
+    window.setTimeout(() => { orderMessage.value = '' }, 5000)
+  }
+}
+
+async function acceptRfqItem(rfq: CoopDashboardData['rfqs'][number]) {
+  acceptingRfqId.value = rfq.id
+  try {
+    await acceptRfq(rfq.id)
+    orderMessage.value = `RFQ dari ${rfq.offtakerName} diterima.`
+    await loadDashboard()
+  } catch (e) {
+    orderMessage.value = e instanceof Error ? e.message : 'Gagal menerima RFQ'
+  } finally {
+    acceptingRfqId.value = ''
+    window.setTimeout(() => { orderMessage.value = '' }, 5000)
+  }
+}
+
+async function publishSurplusStock() {
+  const jumlah = Number(surplusForm.value.qty)
+  const harga = Number(surplusForm.value.price.replace(/\D/g, ''))
+  if (!surplusForm.value.commodity || !jumlah) return
+  publishingSurplus.value = true
+  try {
+    await publishSurplus({
+      namaKomoditas: surplusForm.value.commodity,
+      jumlah,
+      harga: harga || undefined,
+      koperasiRef: DEMO_COOP_ID,
+    })
+    pickupMessage.value = 'Stok surplus berhasil dipublikasikan untuk offtaker.'
+    await loadDashboard()
+  } catch (e) {
+    pickupMessage.value = e instanceof Error ? e.message : 'Gagal mempublikasikan surplus'
+  } finally {
+    publishingSurplus.value = false
+    window.setTimeout(() => { pickupMessage.value = '' }, 5000)
+  }
+}
+
+function openPay(order: CoopDashboardData['orders'][number]) {
+  payOrder.value = order
+  payOpen.value = true
+}
+
+async function onPaySuccess() {
+  orderMessage.value = 'Pembayaran simulasi berhasil.'
+  await loadDashboard()
+  window.setTimeout(() => { orderMessage.value = '' }, 5000)
+}
+
 const orderStatusConfig: Record<string, { label: string; color: string; bg: string; icon: Component }> = {
   'dalam-perjalanan': { label: 'Dalam Perjalanan', color: 'var(--kompak-secondary)', bg: 'rgba(110,139,61,0.12)', icon: Truck },
   dijadwalkan: { label: 'Dijadwalkan', color: 'var(--kompak-accent)', bg: 'var(--kompak-pending-bg)', icon: Clock },
@@ -194,6 +272,7 @@ const tabs = [
   { id: 'kebutuhan', label: 'Kebutuhan Aktif' },
   { id: 'pasokan', label: 'Cari Pasokan' },
   { id: 'pesanan', label: 'Pelacakan Pesanan' },
+  { id: 'surplus', label: 'Stok Surplus' },
 ]
 
 const needsList = ref<CoopDashboardData['activeNeeds']>([])
@@ -352,7 +431,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                       :key="resp.id"
                       :style="{
                         display: 'flex',
-                        alignItems: 'flex-start',
+                        flexDirection: 'column',
                         gap: 'var(--space-md)',
                         padding: 'var(--space-md)',
                         background: 'var(--kompak-surface-white)',
@@ -360,6 +439,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                         border: '1px solid var(--kompak-border)',
                       }"
                     >
+                      <div :style="{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-md)' }">
                       <div
                         :style="{
                           width: 36,
@@ -396,6 +476,17 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                         >{{ resp.statusLabel }}</span>
                         <div :style="{ fontSize: '11px', color: 'var(--kompak-text-light)', marginTop: 4 }">{{ resp.date }}</div>
                       </div>
+                      </div>
+                      <Button
+                        v-if="resp.status === 'diajukan'"
+                        variant="primary"
+                        size="small"
+                        :style="{ alignSelf: 'flex-start' }"
+                        :disabled="acceptingOfferId === resp.id"
+                        @click="acceptOfferResponse(resp)"
+                      >
+                        {{ acceptingOfferId === resp.id ? 'Memproses…' : 'Terima & Buat Transaksi' }}
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -567,29 +658,112 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                   </div>
                   <div :style="{ flex: 1, minWidth: 0 }">
                     <div :style="{ fontSize: '14px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ order.supplier }}</div>
-                    <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ order.commodity }} · {{ order.qty }}</div>
+                    <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ order.commodity }} · {{ order.qty }} · {{ order.value }}</div>
+                    <div :style="{ display: 'flex', gap: 'var(--space-xs)', marginTop: 6, flexWrap: 'wrap' }">
+                      <span :style="{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: order.payStatus === 'lunas' ? 'var(--kompak-verified-bg)' : 'var(--kompak-pending-bg)', color: order.payStatus === 'lunas' ? 'var(--kompak-verified)' : 'var(--kompak-accent)' }">{{ order.payLabel }}</span>
+                      <span :style="{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, color: (orderStatusConfig[order.status] || orderStatusConfig.diproses).color }">{{ (orderStatusConfig[order.status] || orderStatusConfig.diproses).label }}</span>
+                    </div>
                   </div>
                   <div :style="{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-xs)' }">
                     <span :style="{ padding: '2px 8px', borderRadius: 'var(--radius-full)', background: (orderStatusConfig[order.status] || orderStatusConfig.diproses).bg, color: (orderStatusConfig[order.status] || orderStatusConfig.diproses).color, fontSize: '11px', fontWeight: 600 }">{{ (orderStatusConfig[order.status] || orderStatusConfig.diproses).label }}</span>
                     <span :style="{ fontSize: '11px', color: 'var(--kompak-text-light)' }">{{ order.date }}</span>
                   </div>
                 </div>
-                <Button
-                  v-if="nextOrderActionLabel(order.status)"
-                  variant="primary"
-                  size="small"
-                  :style="{ alignSelf: 'flex-start' }"
-                  :disabled="updatingOrderId === order.id"
-                  @click="advanceOrder(order)"
-                >
-                  {{ updatingOrderId === order.id ? 'Memperbarui…' : nextOrderActionLabel(order.status) }}
+                <div :style="{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }">
+                  <Button
+                    v-if="order.payStatus !== 'lunas'"
+                    variant="primary"
+                    size="small"
+                    :style="{ background: 'var(--kompak-accent)' }"
+                    @click="openPay(order)"
+                  >
+                    <template #iconStart><Wallet :size="14" /></template>
+                    Bayar Simulasi
+                  </Button>
+                  <Button
+                    v-if="nextOrderActionLabel(order.status)"
+                    variant="neutral"
+                    size="small"
+                    :disabled="updatingOrderId === order.id"
+                    @click="advanceOrder(order)"
+                  >
+                    {{ updatingOrderId === order.id ? 'Memperbarui…' : nextOrderActionLabel(order.status) }}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stok Surplus & RFQ Offtaker -->
+            <div v-else-if="active === 'surplus'" :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }">
+              <div :style="{ padding: 'var(--space-xl)', background: 'var(--kompak-card-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--kompak-border)' }">
+                <div :style="{ fontSize: '15px', fontWeight: 600, marginBottom: 'var(--space-md)' }">Publikasikan Stok Surplus</div>
+                <div :style="{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }">
+                  <input v-model="surplusForm.commodity" placeholder="Komoditas" :style="{ padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--kompak-border)', fontFamily: 'var(--font-body)' }" />
+                  <input v-model="surplusForm.qty" type="number" placeholder="Jumlah (kg)" :style="{ padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--kompak-border)', fontFamily: 'var(--font-body)' }" />
+                  <input v-model="surplusForm.price" placeholder="Harga/kg" :style="{ padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--kompak-border)', fontFamily: 'var(--font-body)' }" />
+                </div>
+                <Button variant="primary" size="small" :disabled="publishingSurplus" @click="publishSurplusStock">
+                  <template #iconStart><Plus :size="14" /></template>
+                  {{ publishingSurplus ? 'Mempublikasikan…' : 'Publikasikan ke Offtaker' }}
                 </Button>
+              </div>
+
+              <div>
+                <div :style="{ fontSize: '14px', fontWeight: 600, marginBottom: 'var(--space-md)' }">Stok Surplus Aktif</div>
+                <div v-if="surplusList.length === 0" :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">Belum ada stok surplus dipublikasikan.</div>
+                <div v-else :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }">
+                  <div v-for="s in surplusList" :key="s.id" :style="{ padding: 'var(--space-md)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-md)', border: '1px solid var(--kompak-border)' }">
+                    {{ s.commodity }} · {{ s.qty }} · {{ s.price }}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div :style="{ fontSize: '14px', fontWeight: 600, marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }">
+                  <Building2 :size="16" /> RFQ dari Offtaker
+                </div>
+                <div v-if="rfqList.length === 0" :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">Belum ada RFQ masuk.</div>
+                <div v-else :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
+                  <div v-for="rfq in rfqList" :key="rfq.id" :style="{ padding: 'var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--kompak-border)' }">
+                    <div :style="{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-md)', flexWrap: 'wrap' }">
+                      <div>
+                        <div :style="{ fontSize: '14px', fontWeight: 600 }">{{ rfq.offtakerName }}</div>
+                        <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 2 }">{{ rfq.commodity }} · {{ rfq.qty }} · {{ rfq.date }}</div>
+                        <p v-if="rfq.note" :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 4, fontStyle: 'italic' }">"{{ rfq.note }}"</p>
+                      </div>
+                      <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }">
+                        <span :style="{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--kompak-pending-bg)', color: 'var(--kompak-accent)' }">{{ rfq.statusLabel }}</span>
+                        <Button
+                          v-if="rfq.status === 'diajukan'"
+                          variant="primary"
+                          size="small"
+                          :disabled="acceptingRfqId === rfq.id"
+                          @click="acceptRfqItem(rfq)"
+                        >
+                          {{ acceptingRfqId === rfq.id ? 'Memproses…' : 'Terima RFQ' }}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </template>
       </Tabs>
     </div>
+
+    <PaySimulateModal
+      v-if="payOrder"
+      :open="payOpen"
+      :order-id="payOrder.id"
+      :supplier="payOrder.supplier"
+      :commodity="payOrder.commodity"
+      :qty="payOrder.qty"
+      :value="payOrder.value"
+      @close="payOpen = false"
+      @success="onPaySuccess"
+    />
   </div>
 </template>
 

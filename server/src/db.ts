@@ -12,3 +12,4 @@ export const sql = postgres(url, { max: 10 })
 
 export const DEMO_PRODUCER_ID = process.env.VITE_DEMO_PRODUCER_ID || 'ENT-DEMO-PRODUCER-001'
 export const DEMO_COOP_ID = process.env.VITE_DEMO_COOP_ID || 'KOP-02AFA0134DB2'
+export const DEMO_OFFTAKER_ID = process.env.VITE_DEMO_OFFTAKER_ID || 'OFT-DEMO-001'
