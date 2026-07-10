@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { Home, Map, Settings, Sprout, Store, Leaf } from 'lucide-vue-next'
 import {
   ThemeProvider,
@@ -49,6 +49,15 @@ const mobileNav = [
 
 const activeView = ref<View>('home')
 const entityData = ref<EntityData | null>(null)
+const sidebarExpanded = ref(localStorage.getItem('kompak-sidebar-expanded') !== 'false')
+
+watch(sidebarExpanded, (value) => {
+  localStorage.setItem('kompak-sidebar-expanded', String(value))
+})
+
+function toggleSidebar() {
+  sidebarExpanded.value = !sidebarExpanded.value
+}
 
 function navigate(view: string, data?: unknown) {
   activeView.value = view as View
@@ -73,20 +82,44 @@ function isNavActive(navId: string) {
       :style="{ fontFamily: 'var(--font-body)', background: 'var(--kompak-canvas)' }"
     >
       <div class="hidden md:flex">
-        <SidebarNavigation>
+        <SidebarNavigation :is-expanded="sidebarExpanded" @toggle="toggleSidebar">
           <SidebarButton
             v-for="item in primaryNav"
             :key="item.id"
             :active="isNavActive(item.id)"
+            :expanded="sidebarExpanded"
+            :label="item.label"
             @click="activeView = item.view"
           >
             <component :is="item.icon" class="size-full" :stroke-width="1.5" />
           </SidebarButton>
           <template #footer>
-            <SidebarButton>
+            <SidebarButton :expanded="sidebarExpanded" label="Pengaturan">
               <Settings class="size-full" :stroke-width="1.5" />
             </SidebarButton>
-            <Avatar type="initial" initials="PB" size="medium" shape="circle" />
+            <div
+              :style="{
+                display: 'flex',
+                alignItems: 'center',
+                gap: sidebarExpanded ? '10px' : '0',
+                padding: sidebarExpanded ? '0 10px' : '0',
+                justifyContent: sidebarExpanded ? 'flex-start' : 'center',
+              }"
+            >
+              <Avatar type="initial" initials="PB" size="medium" shape="circle" />
+              <span
+                v-if="sidebarExpanded"
+                :style="{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: 'var(--kompak-text-dark)',
+                  whiteSpace: 'nowrap',
+                }"
+              >
+                Pak Budi
+              </span>
+            </div>
           </template>
         </SidebarNavigation>
       </div>
