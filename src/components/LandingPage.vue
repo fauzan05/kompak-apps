@@ -22,13 +22,6 @@ const stats = ref<LandingStat[]>([])
 const komoditas = ref<KomoditasItem[]>([])
 const producerCards = ref<ProducerCard[]>([])
 
-const isScrolled = ref(false)
-if (typeof window !== 'undefined') {
-  window.addEventListener('scroll', () => {
-    isScrolled.value = window.scrollY > 10
-  })
-}
-
 const statsFallback = [
   { value: '—', label: 'Produsen Terdaftar', sub: 'memuat…' },
   { value: '—', label: 'Koperasi Aktif', sub: 'memuat…' },
@@ -95,30 +88,6 @@ const hoveredAction = ref<number | null>(null)
 
 <template>
   <div class="lp-root">
-
-    <!-- ─── NAVBAR ─────────────────────────────────────── -->
-    <nav
-      class="navbar"
-      :class="{ 'navbar--scrolled': isScrolled }"
-    >
-      <div class="navbar__logo" @click="emit('navigate', 'landing')">
-        <div class="navbar__logo-mark">
-          <Sprout :size="16" color="#fff" />
-        </div>
-        <span class="navbar__wordmark">kompak</span>
-      </div>
-
-      <div class="navbar__links">
-        <button class="nav-link nav-link--active">Beranda</button>
-        <button class="nav-link" @click="emit('navigate', 'map')">Peta Komoditas</button>
-        <button class="nav-link" @click="emit('navigate', 'coop-dashboard')">Koperasi</button>
-      </div>
-
-      <div class="navbar__actions">
-        <button class="btn-ghost">Masuk</button>
-        <button class="btn-primary" @click="emit('navigate', 'add-product')">Daftar Sekarang</button>
-      </div>
-    </nav>
 
     <!-- ─── HERO ───────────────────────────────────────── -->
     <section class="hero">
@@ -346,105 +315,7 @@ const hoveredAction = ref<number | null>(null)
 }
 .lp-root::-webkit-scrollbar { display: none; }
 
-/* ─── NAVBAR ─────────────────────────────────────────── */
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: #fff;
-  border-bottom: 1px solid transparent;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  padding: 0 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 64px;
-}
-.navbar--scrolled {
-  border-bottom-color: #EBEBEB;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-}
-.navbar__logo {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  cursor: pointer;
-  text-decoration: none;
-}
-.navbar__logo-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: #0F595E;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.navbar__wordmark {
-  font-family: var(--font-heading);
-  font-size: 18px;
-  font-weight: 700;
-  color: #1A2B2C;
-  letter-spacing: -0.4px;
-}
-.navbar__links {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-.nav-link {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6E6E80;
-  padding: 4px 0;
-  border-bottom: 2px solid transparent;
-  transition: color 0.18s, border-color 0.18s;
-  font-family: inherit;
-}
-.nav-link:hover { color: #0F595E; }
-.nav-link--active {
-  color: #1A2B2C;
-  font-weight: 600;
-  border-bottom-color: #0F595E;
-}
-.navbar__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 /* ─── BUTTONS ────────────────────────────────────────── */
-.btn-ghost {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0F595E;
-  font-family: inherit;
-  padding: 8px 12px;
-  border-radius: 8px;
-  transition: background 0.15s;
-}
-.btn-ghost:hover { background: #F0F7F7; }
-
-.btn-primary {
-  background: #0F595E;
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  padding: 10px 20px;
-  border-radius: 100px;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: inherit;
-  transition: background 0.15s;
-}
-.btn-primary:hover { background: #0C4D51; }
-
 .btn-outline {
   background: #fff;
   border: 1.5px solid #0F595E;
@@ -1034,10 +905,6 @@ const hoveredAction = ref<number | null>(null)
   }
 }
 @media (max-width: 768px) {
-  .navbar {
-    padding: 0 20px;
-  }
-  .navbar__links { display: none; }
   .section { padding: 32px 20px; }
   .hero { padding: 48px 20px 72px; }
   .hero__side { display: none; }

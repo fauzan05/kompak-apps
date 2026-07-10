@@ -29,7 +29,7 @@ const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
 ## UI kit
 
-- Impor dari `@/components/ui`: Button, Tabs, InputField, SidebarNavigation, dll.
+- Impor dari `@/components/ui`: Button, Tabs, InputField, NavbarNavigation, dll.
 - Button pakai slot `#iconStart` / `#iconEnd`
 
 ## Ikon
@@ -42,8 +42,8 @@ const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 - Import CSS: `leaflet/dist/leaflet.css`, markercluster CSS
 - Jangan pakai react-leaflet atau @vue-leaflet
 
-## Sidebar collapsible
+## Navbar
 
-- State `sidebarExpanded` di App.vue
-- Persist: `localStorage` key `kompak-sidebar-expanded`
-- Prop ke SidebarNavigation: `:is-expanded="sidebarExpanded"`
+- Nav items didefinisikan di App.vue (`primaryNav`, `mobileNav`)
+- Komponen shell: `NavbarNavigation` + `NavbarButton` dari `@/components/ui`
+- Active state via `isNavActive()` di App.vue

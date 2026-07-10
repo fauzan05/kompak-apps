@@ -22,9 +22,9 @@ alwaysApply: true
 
 ```
 src/
-  App.vue              # shell + sidebar + view switcher
+  App.vue              # shell + navbar + view switcher
   components/          # halaman fitur (LandingPage, MapView, …)
-  components/ui/     # primitif UI (Button, Tabs, Sidebar*, …)
+  components/ui/     # primitif UI (Button, Tabs, Navbar*, …)
   composables/         # logic reusable (useInView, …)
   styles/              # globals.css tokens, tailwind, fonts
 ```

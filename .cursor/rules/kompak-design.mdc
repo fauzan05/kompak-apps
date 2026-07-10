@@ -38,7 +38,7 @@ Jangan hardcode hex brand baru tanpa menambah token di globals.css.
 
 - Styling: inline style + CSS variables, atau Tailwind utility yang sudah ada
 - Jangan tambah library UI baru (shadcn, Vuetify, dll.) tanpa alasan kuat
-- Desktop: sidebar collapsible (60px collapsed / 220px expanded)
+- Desktop: navbar atas horizontal
 - Mobile: bottom nav, bukan sidebar
 
 ## Contoh

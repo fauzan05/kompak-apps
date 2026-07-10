@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { Home, Map, Settings, Sprout, Store, Leaf, Building2 } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import { Home, Map, Settings, Sprout, Store, Building2 } from 'lucide-vue-next'
 import {
   ThemeProvider,
-  SidebarNavigation,
-  SidebarButton,
+  NavbarNavigation,
+  NavbarButton,
   Avatar,
 } from '@/components/ui'
 import LandingPage from '@/components/LandingPage.vue'
@@ -58,15 +58,6 @@ const mobileNav = [
 
 const activeView = ref<View>('home')
 const entityData = ref<EntityData | null>(null)
-const sidebarExpanded = ref(localStorage.getItem('kompak-sidebar-expanded') !== 'false')
-
-watch(sidebarExpanded, (value) => {
-  localStorage.setItem('kompak-sidebar-expanded', String(value))
-})
-
-function toggleSidebar() {
-  sidebarExpanded.value = !sidebarExpanded.value
-}
 
 function navigate(view: string, data?: unknown) {
   activeView.value = view as View
@@ -88,155 +79,162 @@ function isNavActive(navId: string) {
 <template>
   <ThemeProvider>
     <div
-      class="flex h-screen overflow-hidden"
+      class="flex flex-col h-screen overflow-hidden"
       :style="{ fontFamily: 'var(--font-body)', background: 'var(--kompak-canvas)' }"
     >
-      <div class="hidden md:flex">
-        <SidebarNavigation :is-expanded="sidebarExpanded" @toggle="toggleSidebar">
-          <SidebarButton
-            v-for="item in primaryNav"
-            :key="item.id"
-            :active="isNavActive(item.id)"
-            :expanded="sidebarExpanded"
-            :label="item.label"
-            @click="activeView = item.view"
-          >
-            <component :is="item.icon" class="size-full" :stroke-width="1.5" />
-          </SidebarButton>
-          <template #footer>
-            <SidebarButton :expanded="sidebarExpanded" label="Pengaturan">
-              <Settings class="size-full" :stroke-width="1.5" />
-            </SidebarButton>
-            <div
-              :style="{
-                display: 'flex',
-                alignItems: 'center',
-                gap: sidebarExpanded ? '10px' : '0',
-                padding: sidebarExpanded ? '0 10px' : '0',
-                justifyContent: sidebarExpanded ? 'flex-start' : 'center',
-              }"
-            >
-              <Avatar type="initial" initials="PB" size="medium" shape="circle" />
-              <span
-                v-if="sidebarExpanded"
-                :style="{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  color: 'var(--kompak-text-dark)',
-                  whiteSpace: 'nowrap',
-                }"
-              >
-                Pak Budi
-              </span>
-            </div>
-          </template>
-        </SidebarNavigation>
-      </div>
-
-      <div class="flex flex-col flex-1 min-w-0">
-        <div
-          class="flex md:hidden items-center gap-md px-lg py-md"
-          :style="{
-            background: 'var(--kompak-primary-dark)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 30,
-            flexShrink: 0,
-          }"
+      <NavbarNavigation class="hidden md:flex" @logo-click="navigate('home')">
+        <NavbarButton
+          v-for="item in primaryNav"
+          :key="item.id"
+          :active="isNavActive(item.id)"
+          :label="item.label"
+          @click="navigate(item.view)"
         >
-          <div class="flex items-center gap-md flex-1">
-            <div
-              :style="{
-                width: '28px',
-                height: '28px',
-                borderRadius: '6px',
-                background: 'rgba(255,255,255,0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }"
-            >
-              <Leaf :size="16" color="var(--kompak-accent)" />
-            </div>
-            <span
-              :style="{
-                fontFamily: 'var(--font-heading)',
-                fontSize: '16px',
-                fontWeight: 700,
-                color: '#fff',
-              }"
-            >
-              KOMPAK
-            </span>
-          </div>
-          <span
-            :style="{
-              fontFamily: 'var(--font-body)',
-              fontSize: '11px',
-              color: 'rgba(255,255,255,0.6)',
-              fontStyle: 'italic',
-            }"
-          >
-            Satu Irama, Satu Data
-          </span>
-        </div>
-
-        <div class="flex flex-1 flex-col min-h-0 overflow-hidden">
-          <LandingPage v-if="activeView === 'home'" @navigate="navigate" />
-          <MapView v-else-if="activeView === 'map'" @navigate="navigate" />
-          <ProducerDashboard v-else-if="activeView === 'producer-dashboard'" @navigate="navigate" />
-          <CoopDashboard v-else-if="activeView === 'coop-dashboard'" @navigate="navigate" />
-          <OfftakerDashboard v-else-if="activeView === 'offtaker-dashboard'" @navigate="navigate" />
-          <AddProductForm v-else-if="activeView === 'add-product'" @navigate="navigate" />
-          <EntityDetail
-            v-else-if="activeView === 'entity-detail'"
-            :entity="entityData"
-            @navigate="navigate"
-          />
-          <LandingPage v-else @navigate="navigate" />
-        </div>
-
-        <div
-          class="flex md:hidden"
-          :style="{
-            background: 'var(--kompak-surface-white)',
-            borderTop: '1px solid var(--kompak-border)',
-            flexShrink: 0,
-            zIndex: 30,
-          }"
-        >
+          <component :is="item.icon" class="size-full" :stroke-width="1.5" />
+        </NavbarButton>
+        <template #actions>
           <button
-            v-for="item in mobileNav"
-            :key="item.id"
             type="button"
-            class="flex flex-col items-center justify-center gap-xs flex-1"
+            title="Pengaturan"
             :style="{
-              background: 'none',
+              width: '36px',
+              height: '36px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
-              padding: '10px 4px 8px',
+              background: 'transparent',
               cursor: 'pointer',
-              borderTop: `2px solid ${isNavActive(item.id) ? 'var(--kompak-primary)' : 'transparent'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--kompak-text-muted)',
             }"
-            @click="activeView = item.view"
           >
-            <component
-              :is="item.icon"
-              :size="22"
-              :color="isNavActive(item.id) ? 'var(--kompak-primary)' : 'var(--kompak-text-muted)'"
-              :stroke-width="isNavActive(item.id) ? 2 : 1.5"
-            />
+            <Settings :size="20" :stroke-width="1.5" />
+          </button>
+          <div
+            :style="{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+            }"
+          >
+            <Avatar type="initial" initials="PB" size="medium" shape="circle" />
             <span
               :style="{
                 fontFamily: 'var(--font-body)',
-                fontSize: '10px',
-                fontWeight: isNavActive(item.id) ? 600 : 400,
-                color: isNavActive(item.id) ? 'var(--kompak-primary)' : 'var(--kompak-text-muted)',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--kompak-text-dark)',
+                whiteSpace: 'nowrap',
               }"
             >
-              {{ item.label }}
+              Pak Budi
             </span>
-          </button>
+          </div>
+        </template>
+      </NavbarNavigation>
+
+      <div
+        class="flex md:hidden items-center gap-md px-lg py-md"
+        :style="{
+          background: 'var(--kompak-primary-dark)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          zIndex: 30,
+          flexShrink: 0,
+        }"
+      >
+        <div class="flex items-center gap-md flex-1">
+          <div
+            :style="{
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
+              background: 'rgba(255,255,255,0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }"
+          >
+            <Sprout :size="16" color="var(--kompak-accent)" />
+          </div>
+          <span
+            :style="{
+              fontFamily: 'var(--font-heading)',
+              fontSize: '16px',
+              fontWeight: 700,
+              color: '#fff',
+            }"
+          >
+            KOMPAK
+          </span>
         </div>
+        <span
+          :style="{
+            fontFamily: 'var(--font-body)',
+            fontSize: '11px',
+            color: 'rgba(255,255,255,0.6)',
+            fontStyle: 'italic',
+          }"
+        >
+          Satu Irama, Satu Data
+        </span>
+      </div>
+
+      <div class="flex flex-1 flex-col min-h-0 overflow-hidden">
+        <LandingPage v-if="activeView === 'home'" @navigate="navigate" />
+        <MapView v-else-if="activeView === 'map'" @navigate="navigate" />
+        <ProducerDashboard v-else-if="activeView === 'producer-dashboard'" @navigate="navigate" />
+        <CoopDashboard v-else-if="activeView === 'coop-dashboard'" @navigate="navigate" />
+        <OfftakerDashboard v-else-if="activeView === 'offtaker-dashboard'" @navigate="navigate" />
+        <AddProductForm v-else-if="activeView === 'add-product'" @navigate="navigate" />
+        <EntityDetail
+          v-else-if="activeView === 'entity-detail'"
+          :entity="entityData"
+          @navigate="navigate"
+        />
+        <LandingPage v-else @navigate="navigate" />
+      </div>
+
+      <div
+        class="flex md:hidden"
+        :style="{
+          background: 'var(--kompak-surface-white)',
+          borderTop: '1px solid var(--kompak-border)',
+          flexShrink: 0,
+          zIndex: 30,
+        }"
+      >
+        <button
+          v-for="item in mobileNav"
+          :key="item.id"
+          type="button"
+          class="flex flex-col items-center justify-center gap-xs flex-1"
+          :style="{
+            background: 'none',
+            border: 'none',
+            padding: '10px 4px 8px',
+            cursor: 'pointer',
+            borderTop: `2px solid ${isNavActive(item.id) ? 'var(--kompak-primary)' : 'transparent'}`,
+          }"
+          @click="navigate(item.view)"
+        >
+          <component
+            :is="item.icon"
+            :size="22"
+            :color="isNavActive(item.id) ? 'var(--kompak-primary)' : 'var(--kompak-text-muted)'"
+            :stroke-width="isNavActive(item.id) ? 2 : 1.5"
+          />
+          <span
+            :style="{
+              fontFamily: 'var(--font-body)',
+              fontSize: '10px',
+              fontWeight: isNavActive(item.id) ? 600 : 400,
+              color: isNavActive(item.id) ? 'var(--kompak-primary)' : 'var(--kompak-text-muted)',
+            }"
+          >
+            {{ item.label }}
+          </span>
+        </button>
       </div>
     </div>
   </ThemeProvider>
