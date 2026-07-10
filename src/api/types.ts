@@ -93,6 +93,7 @@ export interface CoopDashboardData {
     commodity: string
     qty: string
     distance: string
+    distanceKm: number
     verified: boolean
     matchScore: number
     price: string

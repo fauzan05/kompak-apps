@@ -61,8 +61,19 @@ export function fetchProducerDashboard(id = DEMO_PRODUCER_ID) {
   return getJson<ProducerDashboardData>(`/dashboard/producer/${id}`)
 }
 
-export function fetchCoopDashboard(id = DEMO_COOP_ID) {
-  return getJson<CoopDashboardData>(`/dashboard/coop/${id}`)
+export function fetchCoopDashboard(
+  id = DEMO_COOP_ID,
+  params?: { commodity?: string; radiusKm?: number; lat?: number; lng?: number },
+) {
+  const qs = new URLSearchParams()
+  if (params?.commodity) qs.set('commodity', params.commodity)
+  if (params?.radiusKm != null) qs.set('radiusKm', String(params.radiusKm))
+  if (params?.lat != null) qs.set('lat', String(params.lat))
+  if (params?.lng != null) qs.set('lng', String(params.lng))
+  const query = qs.toString()
+  return getJson<CoopDashboardData>(
+    `/dashboard/coop/${id}${query ? `?${query}` : ''}`,
+  )
 }
 
 export function submitProduct(payload: {

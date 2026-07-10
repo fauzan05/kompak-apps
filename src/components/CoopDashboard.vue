@@ -1,17 +1,28 @@
 <script setup lang="ts">
-import { onMounted, ref, type Component } from 'vue'
+import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { Button, Tabs } from '@/components/ui'
 import {
   Sprout, Users, MapPin, Plus, Bell, Clock, ChevronRight, Package, Truck,
-  CheckCircle, AlertCircle, Filter, Handshake,
+  CheckCircle, AlertCircle, Filter, Handshake, Search,
 } from 'lucide-vue-next'
 import { DEMO_COOP_ID, fetchCoopDashboard } from '@/api/client'
 import type { CoopDashboardData } from '@/api/types'
+import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
+const geo = useGeolocation()
+
+const COMMODITY_POOL = [
+  'Gula Aren', 'Kopi', 'Beras', 'Madu', 'Sayuran', 'Buah', 'Ikan', 'Kakao',
+] as const
+
+const RADIUS_OPTIONS = [10, 25, 50, 100] as const
+
 const loading = ref(true)
+const pasokanLoading = ref(false)
 const loadError = ref('')
+const pickupMessage = ref('')
 const title = ref('Dashboard Koperasi')
 const location = ref('—')
 const stats = ref<{ label: string; value: string; icon: Component; color: string }[]>([])
@@ -19,9 +30,33 @@ const activeNeeds = ref<CoopDashboardData['activeNeeds']>([])
 const producers = ref<CoopDashboardData['producers']>([])
 const orders = ref<CoopDashboardData['orders']>([])
 
-onMounted(async () => {
+const filterCommodity = ref('')
+const filterRadius = ref<number>(50)
+const showFilterPanel = ref(false)
+
+const commodityOptions = computed(() => {
+  const fromNeeds = activeNeeds.value.map((n) => n.commodity)
+  const merged = [...new Set([...fromNeeds, ...COMMODITY_POOL])]
+  return merged
+})
+
+const filterLabel = computed(() => {
+  const commodity = filterCommodity.value || 'Semua komoditas'
+  const from = geo.usingGps.value ? 'lokasi Anda' : 'koperasi'
+  return `${commodity} · ${filterRadius.value} km · ${from}`
+})
+
+async function loadDashboard(pasokanOnly = false) {
+  if (pasokanOnly) pasokanLoading.value = true
+  else loading.value = true
+
   try {
-    const data = await fetchCoopDashboard(DEMO_COOP_ID)
+    const data = await fetchCoopDashboard(DEMO_COOP_ID, {
+      commodity: filterCommodity.value || undefined,
+      radiusKm: filterRadius.value,
+      lat: geo.usingGps.value ? geo.lat.value : undefined,
+      lng: geo.usingGps.value ? geo.lng.value : undefined,
+    })
     title.value = data.title
     location.value = data.location
     stats.value = [
@@ -34,12 +69,47 @@ onMounted(async () => {
     needsList.value = data.activeNeeds
     producers.value = data.producers
     orders.value = data.orders
+    loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Gagal memuat dashboard'
   } finally {
     loading.value = false
+    pasokanLoading.value = false
+  }
+}
+
+onMounted(async () => {
+  geo.init()
+  await loadDashboard()
+  if (activeNeeds.value[0]?.commodity) {
+    filterCommodity.value = activeNeeds.value[0].commodity
+    await loadDashboard(true)
   }
 })
+
+async function refreshGps() {
+  const ok = await geo.requestLocation()
+  if (ok) await loadDashboard(true)
+}
+
+watch(geo.usingGps, async (active) => {
+  if (active) await loadDashboard(true)
+})
+
+function applyFilters() {
+  showFilterPanel.value = false
+  loadDashboard(true)
+}
+
+function schedulePickup(p: CoopDashboardData['producers'][number]) {
+  const ok = window.confirm(
+    `Jadwalkan pickup dari ${p.name}?\n\nKomoditas: ${p.commodity}\nStok: ${p.qty}\nJarak: ${p.distance}`,
+  )
+  if (ok) {
+    pickupMessage.value = `Permintaan pickup ke ${p.name} telah dicatat. Tim koperasi akan menghubungi produsen.`
+    window.setTimeout(() => { pickupMessage.value = '' }, 5000)
+  }
+}
 
 const orderStatusConfig: Record<string, { label: string; color: string; bg: string; icon: Component }> = {
   'dalam-perjalanan': { label: 'Dalam Perjalanan', color: 'var(--kompak-secondary)', bg: 'rgba(110,139,61,0.12)', icon: Truck },
@@ -79,7 +149,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
 </script>
 
 <template>
-  <div :style="{ flex: 1, overflowY: 'auto', padding: 'var(--space-2xl)', display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)', background: 'var(--kompak-canvas)', fontFamily: 'var(--font-body)' }">
+  <div class="coop-page">
     <div>
       <h1 :style="{ fontFamily: 'var(--font-body)', fontSize: '24px', fontWeight: 700, color: 'var(--kompak-text-dark)' }">Dashboard Koperasi</h1>
       <p :style="{ fontSize: '14px', color: 'var(--kompak-text-muted)', marginTop: 'var(--space-xs)' }">{{ title }} · {{ location }} · Terverifikasi</p>
@@ -106,7 +176,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
     </div>
 
     <!-- Tabs -->
-    <div :style="{ background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' }">
+    <div class="tabs-card">
       <Tabs :tabs="tabs" default-tab="kebutuhan">
         <template #default="{ active }">
           <div :style="{ padding: 'var(--space-xl)' }">
@@ -168,14 +238,78 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
 
             <!-- Cari Pasokan -->
             <div v-else-if="active === 'pasokan'" :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }">
+              <div v-if="pickupMessage" class="pickup-toast">{{ pickupMessage }}</div>
+
               <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', flexWrap: 'wrap' }">
-                <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', flex: 1, background: 'var(--kompak-card-bg)', border: '1px solid var(--kompak-border)', borderRadius: 'var(--radius-full)', padding: '8px 16px', minWidth: '180px' }">
+                <button
+                  type="button"
+                  class="filter-chip"
+                  @click="showFilterPanel = !showFilterPanel"
+                >
                   <Filter :size="14" color="var(--kompak-text-muted)" />
-                  <span :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">Gula Aren · 10 km</span>
-                </div>
-                <Button variant="neutral" size="small">
+                  <span>{{ filterLabel }}</span>
+                </button>
+                <Button variant="neutral" size="small" @click="refreshGps" :title="geo.usingGps.value ? 'Perbarui lokasi GPS' : 'Aktifkan GPS'">
+                  <template #iconStart><MapPin :size="14" /></template>
+                  GPS
+                </Button>
+                <Button variant="neutral" size="small" @click="showFilterPanel = !showFilterPanel">
                   <template #iconStart><Filter :size="14" /></template>
                   Filter
+                </Button>
+                <span v-if="pasokanLoading" :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)' }">Memuat…</span>
+              </div>
+
+              <div v-if="showFilterPanel" class="filter-panel">
+                <div class="filter-panel__section">
+                  <div class="filter-panel__label">Komoditas</div>
+                  <div class="filter-panel__chips">
+                    <button
+                      type="button"
+                      class="filter-panel__chip"
+                      :class="{ 'filter-panel__chip--active': !filterCommodity }"
+                      @click="filterCommodity = ''"
+                    >
+                      Semua
+                    </button>
+                    <button
+                      v-for="c in commodityOptions"
+                      :key="c"
+                      type="button"
+                      class="filter-panel__chip"
+                      :class="{ 'filter-panel__chip--active': filterCommodity === c }"
+                      @click="filterCommodity = c"
+                    >
+                      {{ c }}
+                    </button>
+                  </div>
+                </div>
+                <div class="filter-panel__section">
+                  <div class="filter-panel__label">Radius pencarian</div>
+                  <div class="filter-panel__chips">
+                    <button
+                      v-for="r in RADIUS_OPTIONS"
+                      :key="r"
+                      type="button"
+                      class="filter-panel__chip"
+                      :class="{ 'filter-panel__chip--active': filterRadius === r }"
+                      @click="filterRadius = r"
+                    >
+                      {{ r }} km
+                    </button>
+                  </div>
+                </div>
+                <Button variant="primary" size="small" @click="applyFilters">Terapkan Filter</Button>
+              </div>
+
+              <div v-if="!pasokanLoading && producers.length === 0" class="empty-pasokan">
+                <Search :size="32" color="var(--kompak-text-muted)" />
+                <div class="empty-pasokan__title">Tidak ada produsen ditemukan</div>
+                <div class="empty-pasokan__sub">
+                  Coba perluas radius atau pilih komoditas lain.
+                </div>
+                <Button variant="neutral" size="small" @click="filterCommodity = ''; filterRadius = 100; applyFilters()">
+                  Tampilkan semua dalam 100 km
                 </Button>
               </div>
 
@@ -227,7 +361,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                 </div>
                 <div :style="{ display: 'flex', gap: 'var(--space-md)' }">
                   <Button variant="neutral" size="small" :style="{ flex: 1 }" @click="emit('navigate', 'entity-detail', { type: p.type, id: p.id, name: p.name })">Lihat Etalase</Button>
-                  <Button variant="primary" size="small" :style="{ flex: 1 }">
+                  <Button variant="primary" size="small" :style="{ flex: 1 }" @click="schedulePickup(p)">
                     Jadwalkan Pickup
                     <template #iconEnd><Truck :size="14" /></template>
                   </Button>
@@ -263,6 +397,26 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
 </template>
 
 <style scoped>
+.coop-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  background: var(--kompak-canvas);
+  font-family: var(--font-body);
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabs-card {
+  background: var(--kompak-surface-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: visible;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -325,5 +479,113 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
   .stats-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1;
+  min-width: 180px;
+  background: var(--kompak-card-bg);
+  border: 1px solid var(--kompak-border);
+  border-radius: var(--radius-full);
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--kompak-text-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  text-align: left;
+}
+
+.filter-chip:hover {
+  border-color: var(--kompak-primary);
+}
+
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  background: var(--kompak-card-bg);
+  border: 1px solid var(--kompak-border);
+  border-radius: var(--radius-lg);
+}
+
+.filter-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.filter-panel__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kompak-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.filter-panel__chip {
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--kompak-border);
+  background: var(--kompak-surface-white);
+  font-size: 13px;
+  color: var(--kompak-text-dark);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.filter-panel__chip:hover {
+  border-color: var(--kompak-primary);
+}
+
+.filter-panel__chip--active {
+  border-color: var(--kompak-primary);
+  background: var(--kompak-verified-bg);
+  color: var(--kompak-primary);
+  font-weight: 600;
+}
+
+.empty-pasokan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-2xl);
+  text-align: center;
+  background: var(--kompak-surface-white);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--kompak-border);
+}
+
+.empty-pasokan__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kompak-text-dark);
+}
+
+.empty-pasokan__sub {
+  font-size: 13px;
+  color: var(--kompak-text-muted);
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+.pickup-toast {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--kompak-verified-bg);
+  color: var(--kompak-verified);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
 }
 </style>

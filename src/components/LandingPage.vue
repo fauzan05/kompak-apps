@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import {
   MapPin, Search, ChevronDown, Star, ArrowRight,
   Sprout, Building2, UserPlus, Map,
@@ -7,11 +7,14 @@ import {
 } from 'lucide-vue-next'
 import { fetchCommodities, fetchMapPins, fetchStats } from '@/api/client'
 import type { KomoditasItem, LandingStat, ProducerCard } from '@/api/types'
+import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
+const geo = useGeolocation()
+
 const searchQuery = ref('')
-const locationQuery = ref('Jakarta Selatan')
+const locationQuery = ref('Mencari lokasi…')
 const loading = ref(true)
 const loadError = ref('')
 
@@ -34,17 +37,19 @@ const statsFallback = [
 ]
 
 onMounted(async () => {
+  geo.init()
   loading.value = true
   loadError.value = ''
   try {
     const [s, k, mapData] = await Promise.all([
       fetchStats(),
       fetchCommodities(),
-      fetchMapPins(),
+      fetchMapPins(geo.lat.value, geo.lng.value),
     ])
     stats.value = s
     komoditas.value = k
     producerCards.value = mapData.producerCards
+    locationQuery.value = geo.label.value
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Gagal memuat data'
     stats.value = statsFallback
@@ -52,6 +57,23 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+watch(geo.label, (label) => {
+  locationQuery.value = label
+})
+
+watch(
+  () => [geo.lat.value, geo.lng.value, geo.usingGps.value] as const,
+  async ([, , usingGps]) => {
+    if (!usingGps) return
+    try {
+      const mapData = await fetchMapPins(geo.lat.value, geo.lng.value)
+      producerCards.value = mapData.producerCards
+    } catch {
+      /* keep previous cards */
+    }
+  },
+)
 
 const quickActions = [
   { id: 'map', label: 'Peta Komoditas', desc: 'Temukan produsen terdekat', color: '#0F595E', bg: '#E8F4F4' },
@@ -315,6 +337,7 @@ const hoveredAction = ref<number | null>(null)
 /* ─── ROOT ───────────────────────────────────────────── */
 .lp-root {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   font-family: var(--font-body);
   background: #F2F2F2;

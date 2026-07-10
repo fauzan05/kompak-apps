@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { Home, Map, Settings, Sprout, Store, Leaf } from 'lucide-vue-next'
 import {
   ThemeProvider,
@@ -13,6 +13,10 @@ import ProducerDashboard from '@/components/ProducerDashboard.vue'
 import CoopDashboard from '@/components/CoopDashboard.vue'
 import AddProductForm from '@/components/AddProductForm.vue'
 import EntityDetail from '@/components/EntityDetail.vue'
+import { useGeolocation } from '@/composables/useGeolocation'
+
+const geo = useGeolocation()
+onMounted(() => geo.init())
 
 type View =
   | 'home'

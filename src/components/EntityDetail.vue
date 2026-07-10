@@ -220,7 +220,7 @@ function onGalleryLeave(e: Event) {
 </script>
 
 <template>
-  <div :style="{ flex: 1, overflowY: 'auto', background: 'var(--kompak-canvas)', fontFamily: 'var(--font-body)' }">
+  <div :style="{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--kompak-canvas)', fontFamily: 'var(--font-body)' }">
     <!-- HERO -->
     <div :style="{ position: 'relative', height: '340px', overflow: 'hidden' }">
       <img :src="HERO_COVER" :alt="`Kebun ${name}`" :style="{ width: '100%', height: '100%', objectFit: 'cover' }" />

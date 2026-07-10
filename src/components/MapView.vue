@@ -12,8 +12,11 @@ import {
 
 import { fetchCities, fetchMapPins } from '@/api/client'
 import type { CitySuggestion } from '@/api/types'
+import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
+
+const geo = useGeolocation()
 
 const commodityFilters = [
   { id: 'all', label: 'Semua' },
@@ -27,7 +30,6 @@ const commodityFilters = [
 ]
 
 const radiusOptions = ['5 km', '10 km', '25 km', '50 km']
-const USER_LOCATION: [number, number] = [-6.85, 107.0]
 
 interface City { name: string; province: string; lat: number; lng: number }
 
@@ -54,7 +56,7 @@ async function loadPins() {
   pinsLoading.value = true
   pinsError.value = ''
   try {
-    const data = await fetchMapPins(USER_LOCATION[0], USER_LOCATION[1])
+    const data = await fetchMapPins(geo.lat.value, geo.lng.value)
     allPins.value = data.pins
   } catch (e) {
     pinsError.value = e instanceof Error ? e.message : 'Gagal memuat data peta'
@@ -180,6 +182,38 @@ let map: L.Map | null = null
 let clusterGroup: L.LayerGroup | null = null
 let baseLayer: L.TileLayer | null = null
 let labelLayer: L.TileLayer | null = null
+let userMarker: L.CircleMarker | null = null
+
+function updateUserMarker() {
+  if (!map) return
+  if (userMarker) {
+    map.removeLayer(userMarker)
+    userMarker = null
+  }
+  userMarker = L.circleMarker(geo.coords.value, {
+    radius: 9,
+    fillColor: '#0F595E',
+    color: '#fff',
+    weight: 3,
+    opacity: 1,
+    fillOpacity: 0.9,
+  }).addTo(map)
+  userMarker.bindTooltip(geo.label.value, { direction: 'top', offset: [0, -8] })
+}
+
+watch(
+  () => [geo.lat.value, geo.lng.value] as const,
+  () => {
+    void loadPins().then(() => {
+      updateMarkers()
+      updateUserMarker()
+    })
+  },
+)
+
+watch(geo.usingGps, (active) => {
+  if (active && map) map.flyTo(geo.coords.value, 12, { duration: 1 })
+})
 
 const filteredPins = computed(() => allPins.value.filter((p) => {
   const isKoperasi = p.type === 'koperasi'
@@ -212,8 +246,10 @@ function goToCity(city: City) {
   map?.flyTo([city.lat, city.lng], 12, { duration: 1.4 })
 }
 
-function flyToUser() {
-  map?.flyTo(USER_LOCATION, 9, { duration: 1.2 })
+async function flyToUser() {
+  await geo.requestLocation()
+  map?.flyTo(geo.coords.value, geo.usingGps.value ? 12 : 9, { duration: 1.2 })
+  updateUserMarker()
 }
 
 function onSearchBlur() {
@@ -274,7 +310,9 @@ onMounted(() => {
     iconCreateFunction: clusterIcon,
   })
   map.addLayer(clusterGroup)
+  geo.init()
   updateMarkers()
+  updateUserMarker()
   void loadPins().then(() => updateMarkers())
   void loadCities()
 
@@ -292,6 +330,7 @@ onMounted(() => {
     map?.remove()
     map = null
     clusterGroup = null
+    userMarker = null
   })
 })
 
@@ -661,6 +700,7 @@ watch(search, (q) => {
           justifyContent: 'center',
         }"
         @click="flyToUser"
+        :title="geo.usingGps.value ? 'Pusatkan ke lokasi Anda' : 'Aktifkan GPS'"
       >
         <Navigation :size="18" color="var(--kompak-primary)" />
       </button>

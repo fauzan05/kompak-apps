@@ -49,7 +49,7 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
 </script>
 
 <template>
-  <div :style="{ flex: 1, overflowY: 'auto', background: 'var(--kompak-canvas)', fontFamily: 'var(--font-body)' }">
+  <div :style="{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--kompak-canvas)', fontFamily: 'var(--font-body)' }">
     <div
       :style="{
         maxWidth: '1000px',

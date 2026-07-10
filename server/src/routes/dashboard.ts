@@ -169,42 +169,85 @@ dashboardRoute.get('/coop/:id', async (c) => {
 
   const needCommodities = activeNeeds.map((n) => n.commodity)
 
-  const producers = await sql<{
-    id: string
-    name: string
-    type: string
-    commodity: string
-    qty: number
-    coords: string
-    verified: boolean
-    price: number
-  }[]>`
-    SELECT e.entitas_ref AS id, e.nama AS name, e.tipe AS type,
-      pk.nama_komoditas AS commodity, pk.jumlah AS qty,
-      e.koordinat_dibulatkan AS coords, e.verified, pk.harga AS price
-    FROM entitas_komoditas e
-    JOIN penawaran_komoditas pk ON pk.entitas_ref = e.entitas_ref
-    WHERE pk.status = 'aktif'
-      AND (${needCommodities.length} = 0 OR pk.nama_komoditas = ANY(${needCommodities}))
-    ORDER BY e.rating DESC NULLS LAST
-    LIMIT 12
-  `
+  const commodityFilter = (c.req.query('commodity') || '').trim()
+  const radiusKm = Math.min(500, Math.max(1, Number(c.req.query('radiusKm')) || 50))
+  const queryLat = Number(c.req.query('lat'))
+  const queryLng = Number(c.req.query('lng'))
+  const hasUserCoords = Number.isFinite(queryLat) && Number.isFinite(queryLng)
+  const searchOrigin: [number, number] = hasUserCoords ? [queryLat, queryLng] : origin
 
-  const producersMapped = producers.map((p) => {
-    const pos = parseCoords(p.coords)
-    const km = pos ? haversineKm(origin, [pos.lat, pos.lng]) : 50
-    return {
-      id: p.id,
-      type: p.type,
-      name: p.name,
-      commodity: p.commodity,
-      qty: `${p.qty} kg`,
-      distance: formatDistance(km),
-      verified: p.verified,
-      matchScore: Math.max(55, 100 - Math.round(km)),
-      price: formatRupiah(Number(p.price)),
-    }
-  })
+  const producers = commodityFilter
+    ? await sql<{
+        id: string
+        name: string
+        type: string
+        commodity: string
+        qty: number
+        coords: string
+        verified: boolean
+        price: number
+      }[]>`
+        SELECT e.entitas_ref AS id, e.nama AS name, e.tipe AS type,
+          pk.nama_komoditas AS commodity, pk.jumlah AS qty,
+          e.koordinat_dibulatkan AS coords, e.verified, pk.harga AS price
+        FROM entitas_komoditas e
+        JOIN penawaran_komoditas pk ON pk.entitas_ref = e.entitas_ref
+        WHERE pk.status = 'aktif'
+          AND pk.nama_komoditas ILIKE ${'%' + commodityFilter + '%'}
+        ORDER BY e.rating DESC NULLS LAST
+        LIMIT 80
+      `
+    : await sql<{
+        id: string
+        name: string
+        type: string
+        commodity: string
+        qty: number
+        coords: string
+        verified: boolean
+        price: number
+      }[]>`
+        SELECT e.entitas_ref AS id, e.nama AS name, e.tipe AS type,
+          pk.nama_komoditas AS commodity, pk.jumlah AS qty,
+          e.koordinat_dibulatkan AS coords, e.verified, pk.harga AS price
+        FROM entitas_komoditas e
+        JOIN penawaran_komoditas pk ON pk.entitas_ref = e.entitas_ref
+        WHERE pk.status = 'aktif'
+        ORDER BY e.rating DESC NULLS LAST
+        LIMIT 80
+      `
+
+  function matchesActiveNeed(commodity: string): boolean {
+    const cLower = commodity.toLowerCase()
+    return needCommodities.some((need) => {
+      const nLower = need.toLowerCase()
+      return cLower.includes(nLower) || nLower.includes(cLower)
+    })
+  }
+
+  const producersMapped = producers
+    .map((p) => {
+      const pos = parseCoords(p.coords)
+      const km = pos ? haversineKm(searchOrigin, [pos.lat, pos.lng]) : 999
+      const needBonus = matchesActiveNeed(p.commodity) ? 15 : 0
+      const verifiedBonus = p.verified ? 5 : 0
+      const matchScore = Math.min(99, Math.max(55, 100 - Math.round(km) + needBonus + verifiedBonus))
+      return {
+        id: p.id,
+        type: p.type,
+        name: p.name,
+        commodity: p.commodity,
+        qty: `${p.qty} kg`,
+        distance: formatDistance(km),
+        distanceKm: km,
+        verified: p.verified,
+        matchScore,
+        price: formatRupiah(Number(p.price)),
+      }
+    })
+    .filter((p) => p.distanceKm <= radiusKm)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, 12)
 
   const orders = await sql<{ supplier: string; commodity: string; qty: string; status: string; date: string }[]>`
   (
