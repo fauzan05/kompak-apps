@@ -30,18 +30,24 @@ function getClient(): Sql {
   }
 
   const isServerless = Boolean(process.env.VERCEL)
+  const isSupabase = url.includes('supabase.com')
+
   client = postgres(url, {
     max: isServerless ? 1 : 10,
     idle_timeout: 20,
     connect_timeout: 10,
     prepare: false,
+    ssl: isSupabase ? 'require' : false,
   })
 
   return client
 }
 
+const SKIP_PROXY_PROPS = new Set<PropertyKey>(['then', 'catch', 'finally', Symbol.toStringTag, Symbol.iterator])
+
 export const sql = new Proxy(((...args: Parameters<Sql>) => getClient()(...args)) as Sql, {
   get(_target, prop) {
+    if (SKIP_PROXY_PROPS.has(prop)) return undefined
     const value = (getClient() as unknown as Record<string | symbol, unknown>)[prop]
     return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(getClient()) : value
   },
