@@ -35,9 +35,9 @@ function getClient(): Sql {
   client = postgres(url, {
     max: isServerless ? 1 : 10,
     idle_timeout: 20,
-    connect_timeout: 10,
+    connect_timeout: 15,
     prepare: false,
-    ssl: isSupabase ? 'require' : false,
+    ssl: isSupabase ? { rejectUnauthorized: false } : false,
   })
 
   return client

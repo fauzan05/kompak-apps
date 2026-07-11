@@ -39,6 +39,41 @@ CREATE TABLE kebutuhan_koperasi (
     diperbarui_pada timestamp DEFAULT now()
 );
 
+CREATE TABLE offtaker (
+    offtaker_ref   text NOT NULL PRIMARY KEY,
+    nama           text NOT NULL,
+    perusahaan     text,
+    telepon        text,
+    dibuat_pada    timestamp DEFAULT now()
+);
+
+CREATE TABLE stok_surplus_koperasi (
+    surplus_ref    text NOT NULL PRIMARY KEY,
+    koperasi_ref   text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    nama_komoditas text NOT NULL,
+    jumlah         numeric NOT NULL,
+    satuan         text DEFAULT 'kg',
+    harga          numeric,
+    status         text DEFAULT 'aktif',
+    dibuat_pada    timestamp DEFAULT now()
+);
+
+CREATE TABLE respon_penawaran (
+    respon_ref      text NOT NULL PRIMARY KEY,
+    arah            text NOT NULL CHECK (arah IN ('produsen_ke_koperasi', 'koperasi_ke_produsen')),
+    entitas_ref     text NOT NULL REFERENCES entitas_komoditas (entitas_ref),
+    koperasi_ref    text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    kebutuhan_ref   text REFERENCES kebutuhan_koperasi (kebutuhan_ref),
+    nama_komoditas  text NOT NULL,
+    jumlah          numeric NOT NULL,
+    satuan          text DEFAULT 'kg',
+    harga           numeric,
+    catatan         text,
+    status          text DEFAULT 'diajukan',
+    dibuat_pada     timestamp DEFAULT now(),
+    diperbarui_pada timestamp DEFAULT now()
+);
+
 CREATE TABLE transaksi_kompak (
     transaksi_ref   text NOT NULL PRIMARY KEY,
     entitas_ref     text REFERENCES entitas_komoditas (entitas_ref),
@@ -60,25 +95,6 @@ CREATE TABLE transaksi_kompak (
     dibuat_pada     timestamp DEFAULT now()
 );
 
-CREATE TABLE offtaker (
-    offtaker_ref   text NOT NULL PRIMARY KEY,
-    nama           text NOT NULL,
-    perusahaan     text,
-    telepon        text,
-    dibuat_pada    timestamp DEFAULT now()
-);
-
-CREATE TABLE stok_surplus_koperasi (
-    surplus_ref    text NOT NULL PRIMARY KEY,
-    koperasi_ref   text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
-    nama_komoditas text NOT NULL,
-    jumlah         numeric NOT NULL,
-    satuan         text DEFAULT 'kg',
-    harga          numeric,
-    status         text DEFAULT 'aktif',
-    dibuat_pada    timestamp DEFAULT now()
-);
-
 CREATE TABLE rfq_offtaker (
     rfq_ref        text NOT NULL PRIMARY KEY,
     offtaker_ref   text NOT NULL REFERENCES offtaker (offtaker_ref),
@@ -93,22 +109,6 @@ CREATE TABLE rfq_offtaker (
     status         text DEFAULT 'diajukan',
     dibuat_pada    timestamp DEFAULT now(),
     CHECK (koperasi_ref IS NOT NULL OR entitas_ref IS NOT NULL)
-);
-
-CREATE TABLE respon_penawaran (
-    respon_ref      text NOT NULL PRIMARY KEY,
-    arah            text NOT NULL CHECK (arah IN ('produsen_ke_koperasi', 'koperasi_ke_produsen')),
-    entitas_ref     text NOT NULL REFERENCES entitas_komoditas (entitas_ref),
-    koperasi_ref    text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
-    kebutuhan_ref   text REFERENCES kebutuhan_koperasi (kebutuhan_ref),
-    nama_komoditas  text NOT NULL,
-    jumlah          numeric NOT NULL,
-    satuan          text DEFAULT 'kg',
-    harga           numeric,
-    catatan         text,
-    status          text DEFAULT 'diajukan',
-    dibuat_pada     timestamp DEFAULT now(),
-    diperbarui_pada timestamp DEFAULT now()
 );
 
 CREATE INDEX idx_entitas_komoditas_tipe ON entitas_komoditas (tipe);

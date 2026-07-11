@@ -26,7 +26,7 @@ if (!url) {
   process.exit(1)
 }
 
-const sqlFiles = [
+const baseSqlFiles = [
   'db/docker-init/01_schema.sql',
   'db/referensi_dokumen_koperasi.sql',
   'db/referensi_gerai_koperasi.sql',
@@ -54,6 +54,9 @@ const sqlFiles = [
   'db/inventaris_produk.sql',
   'db/barang_masuk_produk.sql',
   'db/barang_keluar_produk.sql',
+]
+
+const kompakSqlFiles = [
   'db/docker-init/03_kompak_entities.sql',
   'db/docker-init/04_kompak_seed.sql',
   'db/migrations/05_respon_penawaran.sql',
@@ -62,34 +65,61 @@ const sqlFiles = [
   'db/migrations/08_rfq_produsen.sql',
 ]
 
+async function tableExists(sql, name) {
+  const [{ exists }] = await sql`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = ${name}
+    ) AS exists
+  `
+  return exists
+}
+
+async function runFiles(sql, files) {
+  for (const rel of files) {
+    const path = join(root, rel)
+    if (!existsSync(path)) {
+      throw new Error(`File tidak ditemukan: ${rel}`)
+    }
+    const content = readFileSync(path, 'utf8')
+    process.stdout.write(`  → ${rel} ... `)
+    await sql.unsafe(content)
+    console.log('ok')
+  }
+}
+
 async function main() {
-  const sql = postgres(url, { max: 1, prepare: false })
+  const isSupabase = url.includes('supabase.com')
+  const sql = postgres(url, {
+    max: 1,
+    prepare: false,
+    ssl: isSupabase ? 'require' : false,
+  })
 
   try {
-    const [{ exists }] = await sql`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'profil_koperasi'
-      ) AS exists
-    `
+    const hasBase = await tableExists(sql, 'profil_koperasi')
+    const hasKompak = await tableExists(sql, 'entitas_komoditas')
 
-    if (exists) {
-      console.log('Tabel profil_koperasi sudah ada — lewati inisialisasi penuh.')
-      console.log('Untuk reset, hapus semua tabel di Supabase SQL Editor lalu jalankan ulang.')
+    if (hasBase && hasKompak) {
+      const [counts] = await sql`
+        SELECT
+          (SELECT count(*)::int FROM profil_koperasi) AS koperasi,
+          (SELECT count(*)::int FROM entitas_komoditas) AS entitas
+      `
+      console.log(`Sudah lengkap. Koperasi: ${counts.koperasi}, Entitas: ${counts.entitas}`)
       return
     }
 
-    console.log(`Menjalankan ${sqlFiles.length} file SQL ke Supabase...`)
+    if (!hasBase) {
+      console.log(`Menjalankan ${baseSqlFiles.length} file SQL dasar...`)
+      await runFiles(sql, baseSqlFiles)
+    } else {
+      console.log('Tabel dasar sudah ada — lewati seed koperasi.')
+    }
 
-    for (const rel of sqlFiles) {
-      const path = join(root, rel)
-      if (!existsSync(path)) {
-        throw new Error(`File tidak ditemukan: ${rel}`)
-      }
-      const content = readFileSync(path, 'utf8')
-      process.stdout.write(`  → ${rel} ... `)
-      await sql.unsafe(content)
-      console.log('ok')
+    if (!hasKompak) {
+      console.log(`Menjalankan ${kompakSqlFiles.length} file SQL KOMPAK...`)
+      await runFiles(sql, kompakSqlFiles)
     }
 
     const [counts] = await sql`
