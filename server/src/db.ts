@@ -25,20 +25,25 @@ function isValidPgUrl(url: string): boolean {
   }
 }
 
-function buildUrlFromParts(): string | undefined {
+function encodePasswordForUrl(password: string): string {
+  if (/%[0-9A-Fa-f]{2}/.test(password)) return password
+  return encodeURIComponent(password)
+}
+
+export function buildUrlFromParts(): string | undefined {
   const host = cleanEnv(process.env.POSTGRES_HOST)
   const user = cleanEnv(process.env.POSTGRES_USER)
   const password = cleanEnv(process.env.POSTGRES_PASSWORD)
   const database = cleanEnv(process.env.POSTGRES_DATABASE) || 'postgres'
-  const port = cleanEnv(process.env.POSTGRES_PORT) || '6543'
+  const port = cleanEnv(process.env.POSTGRES_PORT) || '5432'
 
   if (!host || !user || !password) return undefined
 
-  const auth = `${encodeURIComponent(user)}:${encodeURIComponent(password)}`
+  const auth = `${encodeURIComponent(user)}:${encodePasswordForUrl(password)}`
   return `postgresql://${auth}@${host}:${port}/${database}`
 }
 
-function getDatabaseUrl(): string | undefined {
+export function getDatabaseUrl(): string | undefined {
   const candidates = [
     cleanEnv(process.env.POSTGRES_URL),
     cleanEnv(process.env.POSTGRES_URL_NON_POOLING),
@@ -53,9 +58,17 @@ function getDatabaseUrl(): string | undefined {
   return buildUrlFromParts()
 }
 
-function getClient(): Sql {
-  if (client) return client
+export function getDatabaseHost(): string | null {
+  const url = getDatabaseUrl()
+  if (!url) return null
+  try {
+    return new URL(url.replace(/^postgresql:\/\//, 'http://')).host
+  } catch {
+    return null
+  }
+}
 
+function createClient(): Sql {
   const url = getDatabaseUrl()
   if (!url) {
     throw new Error(
@@ -66,26 +79,23 @@ function getClient(): Sql {
   const isServerless = Boolean(process.env.VERCEL)
   const isSupabase = url.includes('supabase.com')
 
-  client = postgres(url, {
+  return postgres(url, {
     max: isServerless ? 1 : 10,
     idle_timeout: 20,
     connect_timeout: 15,
     prepare: false,
     ssl: isSupabase ? { rejectUnauthorized: false } : false,
   })
+}
 
+function ensureClient(): Sql {
+  if (!client) client = createClient()
   return client
 }
 
-const SKIP_PROXY_PROPS = new Set<PropertyKey>(['then', 'catch', 'finally', Symbol.toStringTag, Symbol.iterator])
-
-export const sql = new Proxy(((...args: Parameters<Sql>) => getClient()(...args)) as Sql, {
-  get(_target, prop) {
-    if (SKIP_PROXY_PROPS.has(prop)) return undefined
-    const value = (getClient() as unknown as Record<string | symbol, unknown>)[prop]
-    return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(getClient()) : value
-  },
-})
+export const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+  return ensureClient()(strings, ...(values as never[]))
+}) as Sql
 
 export const DEMO_PRODUCER_ID = process.env.VITE_DEMO_PRODUCER_ID || 'ENT-DEMO-PRODUCER-001'
 export const DEMO_COOP_ID = process.env.VITE_DEMO_COOP_ID || 'KOP-02AFA0134DB2'

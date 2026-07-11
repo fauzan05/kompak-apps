@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { sql } from './db.js'
+import { sql, getDatabaseHost } from './db.js'
 import { statsRoute } from './routes/stats.js'
 import { commoditiesRoute } from './routes/commodities.js'
 import { mapRoute } from './routes/map.js'
@@ -24,19 +24,28 @@ app.onError((err, c) => {
 app.get('/api/health', (c) => c.json({ ok: true }))
 
 app.get('/api/db-check', async (c) => {
-  const [tables] = await sql<{ koperasi: number; entitas: number }[]>`
-    SELECT
-      (SELECT count(*)::int FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'profil_koperasi') AS koperasi,
-      (SELECT count(*)::int FROM information_schema.tables
-       WHERE table_schema = 'public' AND table_name = 'entitas_komoditas') AS entitas
+  const host = getDatabaseHost()
+
+  const [profil] = await sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'profil_koperasi'
+    ) AS exists
   `
-  const hasSchema = tables.koperasi > 0 && tables.entitas > 0
-  if (!hasSchema) {
+
+  const [entitas] = await sql<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'entitas_komoditas'
+    ) AS exists
+  `
+
+  if (!profil.exists || !entitas.exists) {
     return c.json({
       ok: false,
+      host,
+      schema: { profil_koperasi: profil.exists, entitas_komoditas: entitas.exists },
       message: 'Skema belum ada — jalankan npm run db:supabase-init',
-      tables,
     }, 503)
   }
 
@@ -45,7 +54,8 @@ app.get('/api/db-check', async (c) => {
       (SELECT count(*)::int FROM profil_koperasi) AS koperasi,
       (SELECT count(*)::int FROM entitas_komoditas) AS entitas
   `
-  return c.json({ ok: true, counts })
+
+  return c.json({ ok: true, host, counts })
 })
 
 app.route('/api/stats', statsRoute)
