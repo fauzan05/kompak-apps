@@ -1,5 +1,6 @@
 node_modules
 .env
 dist
+api/index.js
 server/uploads/*
 !server/uploads/.gitkeep
