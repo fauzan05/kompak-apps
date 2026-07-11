@@ -11,12 +11,46 @@ type Sql = ReturnType<typeof postgres>
 
 let client: Sql | null = null
 
+function cleanEnv(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  return value.trim().replace(/^['"]|['"]$/g, '')
+}
+
+function isValidPgUrl(url: string): boolean {
+  try {
+    new URL(url.replace(/^postgresql:\/\//, 'http://'))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function buildUrlFromParts(): string | undefined {
+  const host = cleanEnv(process.env.POSTGRES_HOST)
+  const user = cleanEnv(process.env.POSTGRES_USER)
+  const password = cleanEnv(process.env.POSTGRES_PASSWORD)
+  const database = cleanEnv(process.env.POSTGRES_DATABASE) || 'postgres'
+  const port = cleanEnv(process.env.POSTGRES_PORT) || '6543'
+
+  if (!host || !user || !password) return undefined
+
+  const auth = `${encodeURIComponent(user)}:${encodeURIComponent(password)}`
+  return `postgresql://${auth}@${host}:${port}/${database}`
+}
+
 function getDatabaseUrl(): string | undefined {
-  return (
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_URL_NON_POOLING
-  )
+  const candidates = [
+    cleanEnv(process.env.POSTGRES_URL),
+    cleanEnv(process.env.POSTGRES_URL_NON_POOLING),
+    cleanEnv(process.env.DATABASE_URL),
+    buildUrlFromParts(),
+  ].filter((value): value is string => Boolean(value))
+
+  for (const url of candidates) {
+    if (isValidPgUrl(url)) return url
+  }
+
+  return buildUrlFromParts()
 }
 
 function getClient(): Sql {
@@ -25,7 +59,7 @@ function getClient(): Sql {
   const url = getDatabaseUrl()
   if (!url) {
     throw new Error(
-      'DATABASE_URL tidak ditemukan — set di Vercel (atau salin dari POSTGRES_URL integrasi Supabase)',
+      'DATABASE_URL tidak ditemukan — set di Vercel (atau salin POSTGRES_URL dari integrasi Supabase)',
     )
   }
 
