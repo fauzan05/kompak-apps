@@ -20,6 +20,15 @@ const metrics = ref<{ label: string; value: string; hint: string; icon: typeof P
 const recommendations = ref<ProducerDashboardData['recommendations']>([])
 const products = ref<ProducerDashboardData['products']>([])
 const transactions = ref<ProducerDashboardData['transactions']>([])
+const brokenPhotoKeys = ref<Record<string, boolean>>({})
+
+function productKey(p: ProducerDashboardData['products'][number], i: number) {
+  return `${p.name}-${i}`
+}
+
+function onPhotoError(key: string) {
+  brokenPhotoKeys.value[key] = true
+}
 
 const offerOpen = ref(false)
 const offerContext = ref<OfferFormContext | null>(null)
@@ -63,6 +72,7 @@ function onOfferError(message: string) {
 }
 
 onMounted(async () => {
+  brokenPhotoKeys.value = {}
   try {
     const data = await fetchProducerDashboard(DEMO_PRODUCER_ID)
     greeting.value = data.greeting
@@ -385,7 +395,7 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
             <div
               v-for="(p, i) in products"
-              :key="`${p.name}-${i}`"
+              :key="productKey(p, i)"
               :style="{
                 background: 'var(--kompak-surface-white)',
                 borderRadius: 'var(--radius-lg)',
@@ -407,9 +417,21 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
+                  overflow: 'hidden',
                 }"
               >
-                <Package :size="20" color="var(--kompak-secondary)" />
+                <img
+                  v-if="p.fotoUrl && !brokenPhotoKeys[productKey(p, i)]"
+                  :src="p.fotoUrl"
+                  :alt="p.name"
+                  :style="{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }"
+                  @error="onPhotoError(productKey(p, i))"
+                >
+                <Package v-else :size="20" color="var(--kompak-secondary)" />
               </div>
               <div :style="{ flex: 1, minWidth: 0 }">
                 <div :style="{ fontSize: '14px', fontWeight: 600, color: 'var(--kompak-text-dark)' }">{{ p.name }}</div>

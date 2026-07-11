@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Button } from '@/components/ui'
-import { Building2, Package, Send, Wallet } from 'lucide-vue-next'
+import { Building2, Package, Search, Send, Sprout, Wallet } from 'lucide-vue-next'
 import {
   DEMO_OFFTAKER_ID,
   fetchOfftakerDashboard,
   submitRfq,
 } from '@/api/client'
-import type { OfftakerDashboardData } from '@/api/types'
+import type { OfftakerDashboardData, OfftakerSource } from '@/api/types'
 import PaySimulateModal from '@/components/PaySimulateModal.vue'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
@@ -17,12 +17,47 @@ const loadError = ref('')
 const toast = ref('')
 const greeting = ref('Offtaker')
 const company = ref('')
-const surplus = ref<OfftakerDashboardData['surplus']>([])
+const sources = ref<OfftakerSource[]>([])
 const rfqs = ref<OfftakerDashboardData['rfqs']>([])
 const transactions = ref<OfftakerDashboardData['transactions']>([])
-const submittingRfq = ref('')
+const submittingId = ref('')
 const payOpen = ref(false)
 const payOrder = ref<OfftakerDashboardData['transactions'][number] | null>(null)
+const searchQuery = ref('')
+const sourceFilter = ref<'all' | 'koperasi' | 'produsen'>('all')
+
+const filterChips = [
+  { id: 'all' as const, label: 'Semua' },
+  { id: 'koperasi' as const, label: 'Koperasi' },
+  { id: 'produsen' as const, label: 'Produsen' },
+]
+
+const filteredSources = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return (sources.value ?? []).filter((item) => {
+    if (sourceFilter.value !== 'all' && item.sourceType !== sourceFilter.value) return false
+    if (!q) return true
+    return (
+      item.partyName.toLowerCase().includes(q)
+      || item.commodity.toLowerCase().includes(q)
+      || item.location.toLowerCase().includes(q)
+    )
+  })
+})
+
+function mapSurplusToSources(surplus: OfftakerDashboardData['surplus']): OfftakerSource[] {
+  return surplus.map((s) => ({
+    id: s.id,
+    sourceType: 'koperasi' as const,
+    partyName: s.koperasiName,
+    partyRef: s.koperasiRef,
+    commodity: s.commodity,
+    qty: s.qty,
+    price: s.price,
+    location: s.location,
+    surplusRef: s.id,
+  }))
+}
 
 async function load() {
   loading.value = true
@@ -30,9 +65,15 @@ async function load() {
     const data = await fetchOfftakerDashboard(DEMO_OFFTAKER_ID)
     greeting.value = data.greeting
     company.value = data.company
-    surplus.value = data.surplus
-    rfqs.value = data.rfqs
-    transactions.value = data.transactions
+    sources.value = data.sources?.length
+      ? data.sources
+      : mapSurplusToSources(data.surplus ?? [])
+    rfqs.value = (data.rfqs ?? []).map((r) => ({
+      ...r,
+      partyName: r.partyName ?? (r as { koperasiName?: string }).koperasiName ?? '—',
+      targetType: (r.targetType ?? 'koperasi') as 'koperasi' | 'produsen',
+    }))
+    transactions.value = data.transactions ?? []
     loadError.value = ''
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Gagal memuat dashboard'
@@ -48,26 +89,44 @@ function parseQty(qty: string): number {
   return m ? Number(m[1]) : 0
 }
 
-async function requestRfq(item: OfftakerDashboardData['surplus'][number]) {
+function sourceTypeLabel(type: OfftakerSource['sourceType']) {
+  return type === 'koperasi' ? 'Koperasi' : 'Produsen'
+}
+
+function targetTypeLabel(type: OfftakerDashboardData['rfqs'][number]['targetType']) {
+  return type === 'koperasi' ? 'Koperasi' : 'Produsen'
+}
+
+async function requestPurchase(item: OfftakerSource) {
   const jumlah = parseQty(item.qty)
   if (!jumlah) return
-  submittingRfq.value = item.id
+  submittingId.value = item.id
   try {
     await submitRfq({
-      koperasiRef: item.koperasiRef,
-      surplusRef: item.id,
+      koperasiRef: item.sourceType === 'koperasi' ? item.partyRef : undefined,
+      entitasRef: item.sourceType === 'produsen' ? item.partyRef : undefined,
+      surplusRef: item.surplusRef,
+      penawaranRef: item.penawaranRef,
       namaKomoditas: item.commodity,
-      jumlah: jumlah,
-      catatan: `RFQ dari ${company.value}`,
+      jumlah,
+      catatan: `Permintaan pembelian dari ${company.value}`,
     })
-    toast.value = `RFQ ${item.commodity} berhasil dikirim ke ${item.koperasiName}.`
+    toast.value = `Permintaan pembelian ${item.commodity} berhasil dikirim ke ${item.partyName}.`
     await load()
   } catch (e) {
-    toast.value = e instanceof Error ? e.message : 'Gagal mengirim RFQ'
+    toast.value = e instanceof Error ? e.message : 'Gagal mengirim permintaan pembelian'
   } finally {
-    submittingRfq.value = ''
+    submittingId.value = ''
     window.setTimeout(() => { toast.value = '' }, 5000)
   }
+}
+
+function viewParty(item: OfftakerSource) {
+  if (item.sourceType === 'koperasi') {
+    emit('navigate', 'entity-detail', { type: 'koperasi', id: item.partyRef, name: item.partyName })
+    return
+  }
+  emit('navigate', 'entity-detail', { type: 'produsen', id: item.partyRef, name: item.partyName })
 }
 
 function openPay(tx: OfftakerDashboardData['transactions'][number]) {
@@ -96,22 +155,91 @@ async function onPaySuccess() {
       <p v-if="loadError" :style="{ color: 'var(--kompak-danger)', fontSize: '14px' }">{{ loadError }}</p>
 
       <div>
-        <h2 :style="{ fontSize: '18px', fontWeight: 700, marginBottom: 'var(--space-lg)' }">Stok Surplus Koperasi</h2>
+        <h2 :style="{ fontSize: '18px', fontWeight: 700, marginBottom: 'var(--space-md)' }">Cari &amp; Beli Komoditas</h2>
+        <p :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)', marginBottom: 'var(--space-lg)' }">
+          Cari penawaran dari koperasi atau produsen, lalu ajukan permintaan pembelian.
+        </p>
+
+        <div :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }">
+          <div
+            :style="{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-sm)',
+              padding: '0 var(--space-md)',
+              height: '40px',
+              background: 'var(--kompak-surface-white)',
+              border: '1px solid var(--kompak-border)',
+              borderRadius: 'var(--radius-md)',
+            }"
+          >
+            <Search :size="16" color="var(--kompak-text-muted)" />
+            <input
+              v-model="searchQuery"
+              type="search"
+              placeholder="Cari komoditas, nama koperasi, atau produsen…"
+              :style="{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontFamily: 'var(--font-body)',
+                fontSize: '14px',
+                color: 'var(--kompak-text-dark)',
+              }"
+            >
+          </div>
+
+          <div :style="{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }">
+            <button
+              v-for="chip in filterChips"
+              :key="chip.id"
+              type="button"
+              :style="{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid var(--kompak-border)',
+                background: sourceFilter === chip.id ? 'var(--kompak-primary)' : 'var(--kompak-surface-white)',
+                color: sourceFilter === chip.id ? '#fff' : 'var(--kompak-text-muted)',
+                fontFamily: 'var(--font-body)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }"
+              @click="sourceFilter = chip.id"
+            >
+              {{ chip.label }}
+            </button>
+          </div>
+        </div>
+
         <div v-if="loading" :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">Memuat…</div>
-        <div v-else-if="surplus.length === 0" :style="{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--kompak-text-muted)', fontSize: '14px' }">
-          Belum ada stok surplus yang dipublikasikan koperasi.
+        <div v-else-if="filteredSources.length === 0" :style="{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--kompak-text-muted)', fontSize: '14px' }">
+          Tidak ada penawaran yang cocok dengan pencarian.
         </div>
         <div v-else :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
           <div
-            v-for="item in surplus"
-            :key="item.id"
+            v-for="item in filteredSources"
+            :key="`${item.sourceType}-${item.id}`"
             :style="{ padding: 'var(--space-xl)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--kompak-border)', boxShadow: 'var(--shadow-card)' }"
           >
             <div :style="{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-md)', flexWrap: 'wrap' }">
               <div>
-                <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }">
-                  <Building2 :size="16" color="var(--kompak-primary)" />
-                  <span :style="{ fontSize: '15px', fontWeight: 600 }">{{ item.koperasiName }}</span>
+                <div :style="{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', flexWrap: 'wrap' }">
+                  <component :is="item.sourceType === 'koperasi' ? Building2 : Sprout" :size="16" color="var(--kompak-primary)" />
+                  <span :style="{ fontSize: '15px', fontWeight: 600 }">{{ item.partyName }}</span>
+                  <span
+                    :style="{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      background: item.sourceType === 'koperasi' ? 'rgba(15,89,94,0.1)' : 'rgba(45,106,79,0.12)',
+                      color: item.sourceType === 'koperasi' ? 'var(--kompak-primary)' : 'var(--kompak-secondary)',
+                    }"
+                  >
+                    {{ sourceTypeLabel(item.sourceType) }}
+                  </span>
                 </div>
                 <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)', marginTop: 4 }">{{ item.location }}</div>
                 <div :style="{ fontSize: '13px', marginTop: 'var(--space-md)' }">
@@ -120,12 +248,12 @@ async function onPaySuccess() {
                 </div>
               </div>
               <div :style="{ display: 'flex', gap: 'var(--space-sm)' }">
-                <Button variant="neutral" size="small" @click="emit('navigate', 'entity-detail', { type: 'koperasi', id: item.koperasiRef, name: item.koperasiName })">
-                  Lihat Koperasi
+                <Button variant="neutral" size="small" @click="viewParty(item)">
+                  {{ item.sourceType === 'koperasi' ? 'Lihat Koperasi' : 'Lihat Produsen' }}
                 </Button>
-                <Button variant="primary" size="small" :disabled="submittingRfq === item.id" @click="requestRfq(item)">
+                <Button variant="primary" size="small" :disabled="submittingId === item.id" @click="requestPurchase(item)">
                   <template #iconStart><Send :size="14" /></template>
-                  {{ submittingRfq === item.id ? 'Mengirim…' : 'Ajukan RFQ' }}
+                  {{ submittingId === item.id ? 'Mengirim…' : 'Ajukan Pembelian' }}
                 </Button>
               </div>
             </div>
@@ -134,8 +262,8 @@ async function onPaySuccess() {
       </div>
 
       <div>
-        <h2 :style="{ fontSize: '18px', fontWeight: 700, marginBottom: 'var(--space-lg)' }">RFQ Saya</h2>
-        <div v-if="!loading && rfqs.length === 0" :style="{ fontSize: '14px', color: 'var(--kompak-text-muted)' }">Belum ada RFQ.</div>
+        <h2 :style="{ fontSize: '18px', fontWeight: 700, marginBottom: 'var(--space-lg)' }">Permintaan Pembelian Saya</h2>
+        <div v-if="!loading && rfqs.length === 0" :style="{ fontSize: '14px', color: 'var(--kompak-text-muted)' }">Belum ada permintaan pembelian.</div>
         <div v-else :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }">
           <div
             v-for="r in rfqs"
@@ -143,8 +271,10 @@ async function onPaySuccess() {
             :style="{ padding: 'var(--space-md) var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-md)', border: '1px solid var(--kompak-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-md)' }"
           >
             <div>
-              <div :style="{ fontSize: '14px', fontWeight: 600 }">{{ r.koperasiName }} — {{ r.commodity }}</div>
-              <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)' }">{{ r.qty }} · {{ r.date }}</div>
+              <div :style="{ fontSize: '14px', fontWeight: 600 }">{{ r.partyName }} — {{ r.commodity }}</div>
+              <div :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)' }">
+                {{ targetTypeLabel(r.targetType) }} · {{ r.qty }} · {{ r.date }}
+              </div>
             </div>
             <span :style="{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--kompak-pending-bg)', color: 'var(--kompak-accent)' }">{{ r.statusLabel }}</span>
           </div>

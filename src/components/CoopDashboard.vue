@@ -217,10 +217,10 @@ async function acceptRfqItem(rfq: CoopDashboardData['rfqs'][number]) {
   acceptingRfqId.value = rfq.id
   try {
     await acceptRfq(rfq.id)
-    orderMessage.value = `RFQ dari ${rfq.offtakerName} diterima.`
+    orderMessage.value = `Permintaan dari ${rfq.offtakerName} diterima.`
     await loadDashboard()
   } catch (e) {
-    orderMessage.value = e instanceof Error ? e.message : 'Gagal menerima RFQ'
+    orderMessage.value = e instanceof Error ? e.message : 'Gagal menerima permintaan'
   } finally {
     acceptingRfqId.value = ''
     window.setTimeout(() => { orderMessage.value = '' }, 5000)
@@ -693,7 +693,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
               </div>
             </div>
 
-            <!-- Stok Surplus & RFQ Offtaker -->
+            <!-- Stok Surplus & Permintaan Offtaker -->
             <div v-else-if="active === 'surplus'" :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }">
               <div :style="{ padding: 'var(--space-xl)', background: 'var(--kompak-card-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--kompak-border)' }">
                 <div :style="{ fontSize: '15px', fontWeight: 600, marginBottom: 'var(--space-md)' }">Publikasikan Stok Surplus</div>
@@ -720,9 +720,9 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
 
               <div>
                 <div :style="{ fontSize: '14px', fontWeight: 600, marginBottom: 'var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }">
-                  <Building2 :size="16" /> RFQ dari Offtaker
+                  <Building2 :size="16" /> Permintaan dari Offtaker
                 </div>
-                <div v-if="rfqList.length === 0" :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">Belum ada RFQ masuk.</div>
+                <div v-if="rfqList.length === 0" :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">Belum ada permintaan masuk.</div>
                 <div v-else :style="{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }">
                   <div v-for="rfq in rfqList" :key="rfq.id" :style="{ padding: 'var(--space-lg)', background: 'var(--kompak-surface-white)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--kompak-border)' }">
                     <div :style="{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-md)', flexWrap: 'wrap' }">
@@ -740,7 +740,7 @@ function producerFields(p: CoopDashboardData['producers'][number]) {
                           :disabled="acceptingRfqId === rfq.id"
                           @click="acceptRfqItem(rfq)"
                         >
-                          {{ acceptingRfqId === rfq.id ? 'Memproses…' : 'Terima RFQ' }}
+                          {{ acceptingRfqId === rfq.id ? 'Memproses…' : 'Terima Permintaan' }}
                         </Button>
                       </div>
                     </div>

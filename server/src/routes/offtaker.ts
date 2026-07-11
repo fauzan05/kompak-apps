@@ -4,6 +4,10 @@ import { formatRupiah } from '../utils.js'
 
 export const offtakerRoute = new Hono()
 
+function formatPricePerKg(price: string): string {
+  return Number(price) > 0 ? `${formatRupiah(Number(price))}/kg` : '—'
+}
+
 offtakerRoute.get('/dashboard/:id', async (c) => {
   const id = c.req.param('id') || DEMO_OFFTAKER_ID
 
@@ -38,9 +42,62 @@ offtakerRoute.get('/dashboard/:id', async (c) => {
     LIMIT 20
   `
 
+  const producerOffers = await sql<{
+    id: string
+    partyName: string
+    partyRef: string
+    commodity: string
+    qty: string
+    price: string
+    location: string
+    penawaranRef: string
+  }[]>`
+    SELECT
+      pk.penawaran_ref AS id,
+      e.nama AS "partyName",
+      e.entitas_ref AS "partyRef",
+      pk.nama_komoditas AS commodity,
+      pk.jumlah::text || ' ' || pk.satuan AS qty,
+      coalesce(pk.harga::text, '0') AS price,
+      coalesce(w.kab_kota, 'Indonesia') AS location,
+      pk.penawaran_ref AS "penawaranRef"
+    FROM penawaran_komoditas pk
+    JOIN entitas_komoditas e ON e.entitas_ref = pk.entitas_ref
+    LEFT JOIN referensi_wilayah w ON w.kode_wilayah = e.kode_wilayah
+    WHERE pk.status = 'aktif'
+    ORDER BY pk.dibuat_pada DESC
+    LIMIT 20
+  `
+
+  const sources = [
+    ...surplus.map((s) => ({
+      id: s.id,
+      sourceType: 'koperasi' as const,
+      partyName: s.koperasiName,
+      partyRef: s.koperasiRef,
+      commodity: s.commodity,
+      qty: s.qty,
+      price: formatPricePerKg(s.price),
+      location: s.location,
+      surplusRef: s.id,
+    })),
+    ...producerOffers.map((p) => ({
+      id: p.id,
+      sourceType: 'produsen' as const,
+      partyName: p.partyName,
+      partyRef: p.partyRef,
+      commodity: p.commodity,
+      qty: p.qty,
+      price: formatPricePerKg(p.price),
+      location: p.location,
+      penawaranRef: p.penawaranRef,
+    })),
+  ]
+
   const rfqs = await sql<{
     id: string
-    koperasiName: string
+    partyName: string
+    targetType: string
     commodity: string
     qty: string
     status: string
@@ -48,13 +105,15 @@ offtakerRoute.get('/dashboard/:id', async (c) => {
   }[]>`
     SELECT
       r.rfq_ref AS id,
-      p.nama_koperasi AS "koperasiName",
+      coalesce(p.nama_koperasi, e.nama, 'Pihak') AS "partyName",
+      CASE WHEN r.entitas_ref IS NOT NULL THEN 'produsen' ELSE 'koperasi' END AS "targetType",
       r.nama_komoditas AS commodity,
       r.jumlah::text || ' ' || r.satuan AS qty,
       r.status,
       to_char(r.dibuat_pada, 'DD Mon YYYY') AS date
     FROM rfq_offtaker r
-    JOIN profil_koperasi p ON p.koperasi_ref = r.koperasi_ref
+    LEFT JOIN profil_koperasi p ON p.koperasi_ref = r.koperasi_ref
+    LEFT JOIN entitas_komoditas e ON e.entitas_ref = r.entitas_ref
     WHERE r.offtaker_ref = ${id}
     ORDER BY r.dibuat_pada DESC
     LIMIT 10
@@ -89,12 +148,14 @@ offtakerRoute.get('/dashboard/:id', async (c) => {
   return c.json({
     greeting: offtaker.nama,
     company: offtaker.perusahaan,
+    sources,
     surplus: surplus.map((s) => ({
       ...s,
-      price: Number(s.price) > 0 ? formatRupiah(Number(s.price)) + '/kg' : '—',
+      price: formatPricePerKg(s.price),
     })),
     rfqs: rfqs.map((r) => ({
       ...r,
+      targetType: r.targetType === 'produsen' ? 'produsen' : 'koperasi',
       statusLabel: r.status === 'diajukan' ? 'Menunggu' : r.status === 'diterima' ? 'Diterima' : r.status,
     })),
     transactions: transactions.map((t) => ({
@@ -110,16 +171,21 @@ offtakerRoute.get('/dashboard/:id', async (c) => {
 offtakerRoute.post('/rfq', async (c) => {
   const body = await c.req.json<{
     offtakerRef?: string
-    koperasiRef: string
+    koperasiRef?: string
+    entitasRef?: string
     surplusRef?: string
+    penawaranRef?: string
     namaKomoditas: string
     jumlah: number
     satuan?: string
     catatan?: string
   }>()
 
-  if (!body.koperasiRef || !body.namaKomoditas || !body.jumlah) {
-    return c.json({ error: 'Koperasi, komoditas, dan jumlah wajib diisi' }, 400)
+  const hasKoperasi = Boolean(body.koperasiRef)
+  const hasProdusen = Boolean(body.entitasRef)
+
+  if ((!hasKoperasi && !hasProdusen) || !body.namaKomoditas || !body.jumlah) {
+    return c.json({ error: 'Pihak tujuan, komoditas, dan jumlah wajib diisi' }, 400)
   }
 
   const offtakerRef = body.offtakerRef || DEMO_OFFTAKER_ID
@@ -127,14 +193,16 @@ offtakerRoute.post('/rfq', async (c) => {
 
   await sql`
     INSERT INTO rfq_offtaker (
-      rfq_ref, offtaker_ref, koperasi_ref, surplus_ref,
+      rfq_ref, offtaker_ref, koperasi_ref, entitas_ref, surplus_ref, penawaran_ref,
       nama_komoditas, jumlah, satuan, catatan, status
     )
     VALUES (
       ${rfqRef},
       ${offtakerRef},
-      ${body.koperasiRef},
+      ${body.koperasiRef || null},
+      ${body.entitasRef || null},
       ${body.surplusRef || null},
+      ${body.penawaranRef || null},
       ${body.namaKomoditas},
       ${body.jumlah},
       ${body.satuan || 'kg'},
@@ -219,7 +287,7 @@ offtakerRoute.post('/rfq/:id/accept', async (c) => {
   const [rfq] = await sql<{
     rfq_ref: string
     offtaker_ref: string
-    koperasi_ref: string
+    koperasi_ref: string | null
     nama_komoditas: string
     jumlah: number
     status: string
@@ -231,8 +299,9 @@ offtakerRoute.post('/rfq/:id/accept', async (c) => {
     LEFT JOIN stok_surplus_koperasi s ON s.surplus_ref = r.surplus_ref
     WHERE r.rfq_ref = ${rfqRef}
   `
-  if (!rfq) return c.json({ error: 'RFQ tidak ditemukan' }, 404)
-  if (rfq.status === 'diterima') return c.json({ error: 'RFQ sudah diterima' }, 400)
+  if (!rfq) return c.json({ error: 'Permintaan tidak ditemukan' }, 404)
+  if (!rfq.koperasi_ref) return c.json({ error: 'Permintaan ke produsen belum dapat diterima dari sini' }, 400)
+  if (rfq.status === 'diterima') return c.json({ error: 'Permintaan sudah diterima' }, 400)
 
   const [existingTx] = await sql<{ transaksi_ref: string }[]>`
     SELECT transaksi_ref FROM transaksi_kompak WHERE rfq_ref = ${rfqRef} LIMIT 1

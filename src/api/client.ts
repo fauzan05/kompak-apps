@@ -174,8 +174,10 @@ export function fetchOfftakerDashboard(id = DEMO_OFFTAKER_ID) {
 }
 
 export function submitRfq(payload: {
-  koperasiRef: string
+  koperasiRef?: string
+  entitasRef?: string
   surplusRef?: string
+  penawaranRef?: string
   namaKomoditas: string
   jumlah: number
   satuan?: string

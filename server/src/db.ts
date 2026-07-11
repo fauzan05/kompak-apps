@@ -3,12 +3,49 @@ import { config } from 'dotenv'
 import { join } from 'path'
 import { projectRoot } from './paths.js'
 
-config({ path: join(projectRoot, '.env') })
+if (!process.env.VERCEL) {
+  config({ path: join(projectRoot, '.env') })
+}
 
-const url = process.env.DATABASE_URL
-if (!url) throw new Error('DATABASE_URL tidak ditemukan — pastikan .env ada di root proyek')
+type Sql = ReturnType<typeof postgres>
 
-export const sql = postgres(url, { max: 10 })
+let client: Sql | null = null
+
+function getDatabaseUrl(): string | undefined {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_URL_NON_POOLING
+  )
+}
+
+function getClient(): Sql {
+  if (client) return client
+
+  const url = getDatabaseUrl()
+  if (!url) {
+    throw new Error(
+      'DATABASE_URL tidak ditemukan — set di Vercel (atau salin dari POSTGRES_URL integrasi Supabase)',
+    )
+  }
+
+  const isServerless = Boolean(process.env.VERCEL)
+  client = postgres(url, {
+    max: isServerless ? 1 : 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    prepare: false,
+  })
+
+  return client
+}
+
+export const sql = new Proxy(((...args: Parameters<Sql>) => getClient()(...args)) as Sql, {
+  get(_target, prop) {
+    const value = (getClient() as unknown as Record<string | symbol, unknown>)[prop]
+    return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(getClient()) : value
+  },
+})
 
 export const DEMO_PRODUCER_ID = process.env.VITE_DEMO_PRODUCER_ID || 'ENT-DEMO-PRODUCER-001'
 export const DEMO_COOP_ID = process.env.VITE_DEMO_COOP_ID || 'KOP-02AFA0134DB2'

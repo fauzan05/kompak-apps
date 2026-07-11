@@ -14,6 +14,7 @@ import CoopDashboard from '@/components/CoopDashboard.vue'
 import AddProductForm from '@/components/AddProductForm.vue'
 import EntityDetail from '@/components/EntityDetail.vue'
 import OfftakerDashboard from '@/components/OfftakerDashboard.vue'
+import SimkopdesShell from '@/components/portal/SimkopdesShell.vue'
 import { useGeolocation } from '@/composables/useGeolocation'
 import type { MapSearchPayload } from '@/api/types'
 
@@ -84,10 +85,11 @@ function isNavActive(navId: string) {
 
 <template>
   <ThemeProvider>
-    <div
-      class="flex flex-col h-screen overflow-hidden"
-      :style="{ fontFamily: 'var(--font-body)', background: 'var(--kompak-canvas)' }"
-    >
+    <SimkopdesShell>
+      <div
+        class="flex flex-col h-full w-full overflow-hidden"
+        :style="{ fontFamily: 'var(--font-body)', background: 'var(--kompak-canvas)' }"
+      >
       <NavbarNavigation class="hidden md:flex" @logo-click="navigate('home')">
         <NavbarButton
           v-for="item in primaryNav"
@@ -242,6 +244,7 @@ function isNavActive(navId: string) {
           </span>
         </button>
       </div>
-    </div>
+      </div>
+    </SimkopdesShell>
   </ThemeProvider>
 </template>

@@ -71,7 +71,7 @@ export interface ProducerDashboardData {
     verified: boolean
     activeNeed: string
   }[]
-  products: { name: string; qty: string; price: string; status: string }[]
+  products: { name: string; qty: string; price: string; status: string; fotoUrl?: string | null }[]
   transactions: {
     id: string
     koperasi: string
@@ -135,9 +135,23 @@ export interface CoopDashboardData {
   }[]
 }
 
+export interface OfftakerSource {
+  id: string
+  sourceType: 'koperasi' | 'produsen'
+  partyName: string
+  partyRef: string
+  commodity: string
+  qty: string
+  price: string
+  location: string
+  surplusRef?: string
+  penawaranRef?: string
+}
+
 export interface OfftakerDashboardData {
   greeting: string
   company: string
+  sources: OfftakerSource[]
   surplus: {
     id: string
     koperasiName: string
@@ -149,7 +163,8 @@ export interface OfftakerDashboardData {
   }[]
   rfqs: {
     id: string
-    koperasiName: string
+    partyName: string
+    targetType: 'koperasi' | 'produsen'
     commodity: string
     qty: string
     status: string

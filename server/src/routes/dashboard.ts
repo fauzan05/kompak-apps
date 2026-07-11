@@ -25,11 +25,12 @@ dashboardRoute.get('/producer/:id', async (c) => {
 
   const origin: [number, number] = [entity.lat, entity.lng]
 
-  const products = await sql<{ name: string; qty: string; price: string; status: string }[]>`
+  const products = await sql<{ name: string; qty: string; price: string; status: string; fotoUrl: string | null }[]>`
     SELECT
       nama_komoditas AS name,
       jumlah::text || ' ' || satuan AS qty,
       ${''} AS price,
+      foto_url AS "fotoUrl",
       status
     FROM penawaran_komoditas
     WHERE entitas_ref = ${id}
@@ -37,9 +38,11 @@ dashboardRoute.get('/producer/:id', async (c) => {
     LIMIT 10
   `
   const productsMapped = products.map((p) => ({
-    ...p,
+    name: p.name,
+    qty: p.qty,
     price: 'Aktif',
     status: p.status === 'aktif' ? 'Aktif' : 'Nonaktif',
+    fotoUrl: p.fotoUrl ?? (p as { foto_url?: string | null }).foto_url ?? null,
   }))
 
   const [metrics] = await sql<{ active: number; tx: number; revenue: number }[]>`

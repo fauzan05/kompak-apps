@@ -82,14 +82,17 @@ CREATE TABLE stok_surplus_koperasi (
 CREATE TABLE rfq_offtaker (
     rfq_ref        text NOT NULL PRIMARY KEY,
     offtaker_ref   text NOT NULL REFERENCES offtaker (offtaker_ref),
-    koperasi_ref   text NOT NULL REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    koperasi_ref   text REFERENCES referensi_koperasi_wilayah (koperasi_ref),
+    entitas_ref    text REFERENCES entitas_komoditas (entitas_ref),
     surplus_ref    text REFERENCES stok_surplus_koperasi (surplus_ref),
+    penawaran_ref  text REFERENCES penawaran_komoditas (penawaran_ref),
     nama_komoditas text NOT NULL,
     jumlah         numeric NOT NULL,
     satuan         text DEFAULT 'kg',
     catatan        text,
     status         text DEFAULT 'diajukan',
-    dibuat_pada    timestamp DEFAULT now()
+    dibuat_pada    timestamp DEFAULT now(),
+    CHECK (koperasi_ref IS NOT NULL OR entitas_ref IS NOT NULL)
 );
 
 CREATE TABLE respon_penawaran (
@@ -116,3 +119,4 @@ CREATE INDEX idx_respon_penawaran_kebutuhan ON respon_penawaran (kebutuhan_ref);
 CREATE INDEX idx_respon_penawaran_koperasi ON respon_penawaran (koperasi_ref);
 CREATE INDEX idx_surplus_koperasi ON stok_surplus_koperasi (koperasi_ref);
 CREATE INDEX idx_rfq_koperasi ON rfq_offtaker (koperasi_ref);
+CREATE INDEX idx_rfq_entitas ON rfq_offtaker (entitas_ref);
