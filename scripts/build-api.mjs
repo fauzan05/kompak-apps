@@ -4,7 +4,7 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const outfile = join(root, 'api', 'index.js')
+const outfile = join(root, 'lib', 'api-app.mjs')
 
 mkdirSync(dirname(outfile), { recursive: true })
 
