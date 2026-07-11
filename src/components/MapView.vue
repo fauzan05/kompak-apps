@@ -11,8 +11,12 @@ import {
 } from 'lucide-vue-next'
 
 import { fetchCities, fetchMapPins } from '@/api/client'
-import type { CitySuggestion } from '@/api/types'
+import type { CitySuggestion, MapSearchPayload } from '@/api/types'
 import { useGeolocation } from '@/composables/useGeolocation'
+
+const props = defineProps<{
+  initialSearch?: MapSearchPayload | null
+}>()
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
@@ -51,12 +55,16 @@ export interface PinData {
 }
 
 const allPins = ref<PinData[]>([])
+const searchCenterLat = ref<number | null>(null)
+const searchCenterLng = ref<number | null>(null)
 
 async function loadPins() {
   pinsLoading.value = true
   pinsError.value = ''
+  const lat = searchCenterLat.value ?? geo.lat.value
+  const lng = searchCenterLng.value ?? geo.lng.value
   try {
-    const data = await fetchMapPins(geo.lat.value, geo.lng.value)
+    const data = await fetchMapPins(lat, lng)
     allPins.value = data.pins
   } catch (e) {
     pinsError.value = e instanceof Error ? e.message : 'Gagal memuat data peta'
@@ -215,22 +223,37 @@ watch(geo.usingGps, (active) => {
   if (active && map) map.flyTo(geo.coords.value, 12, { duration: 1 })
 })
 
-const filteredPins = computed(() => allPins.value.filter((p) => {
-  const isKoperasi = p.type === 'koperasi'
-  const isKomoditas = p.type === 'produsen' || p.type === 'komunitas'
-  if (isKoperasi && !showKoperasi.value) return false
-  if (isKomoditas && !showKomoditas.value) return false
-
-  if (activeFilter.value === 'all') return true
-  const filterMap: Record<string, string> = {
-    'gula-aren': 'Gula Aren', kopi: 'Kopi', beras: 'Beras', madu: 'Madu', sayur: 'Sayuran', buah: 'Buah', ikan: 'Ikan',
-  }
-  const keyword = filterMap[activeFilter.value]
-  if (!keyword) return true
+function pinMatchesSearch(p: PinData, q: string): boolean {
+  if (!q) return true
+  if (p.name.toLowerCase().includes(q)) return true
+  if (p.city.toLowerCase().includes(q)) return true
+  if (p.stock.toLowerCase().includes(q)) return true
   return (p.commodities ?? []).some(
-    (c) => typeof c === 'string' && c.toLowerCase().includes(keyword.toLowerCase()),
+    (c) => typeof c === 'string' && c.toLowerCase().includes(q),
   )
-}))
+}
+
+const chipFilterMap: Record<string, string> = {
+  'gula-aren': 'Gula Aren', kopi: 'Kopi', beras: 'Beras', madu: 'Madu', sayur: 'Sayuran', buah: 'Buah', ikan: 'Ikan',
+}
+
+const filteredPins = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  const chipKeyword = activeFilter.value !== 'all' ? chipFilterMap[activeFilter.value] : null
+
+  return allPins.value.filter((p) => {
+    const isKoperasi = p.type === 'koperasi'
+    const isKomoditas = p.type === 'produsen' || p.type === 'komunitas'
+    if (isKoperasi && !showKoperasi.value) return false
+    if (isKomoditas && !showKomoditas.value) return false
+
+    if (chipKeyword && !(p.commodities ?? []).some(
+      (c) => typeof c === 'string' && c.toLowerCase().includes(chipKeyword.toLowerCase()),
+    )) return false
+
+    return pinMatchesSearch(p, q)
+  })
+})
 
 const citySuggestions = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -254,6 +277,36 @@ async function flyToUser() {
 
 function onSearchBlur() {
   window.setTimeout(() => { showCityList.value = false }, 150)
+}
+
+async function applyInitialSearch() {
+  const s = props.initialSearch
+  if (!s) return
+
+  if (s.query) search.value = s.query
+
+  if (s.lat != null && s.lng != null) {
+    searchCenterLat.value = s.lat
+    searchCenterLng.value = s.lng
+  }
+
+  if (s.city) {
+    const match = cities.value.find((c) => c.name === s.city)
+    selectedCity.value = match ?? {
+      name: s.city,
+      province: '',
+      lat: s.lat ?? -6.2,
+      lng: s.lng ?? 106.82,
+    }
+    if (!s.query) search.value = s.city
+  }
+
+  if (s.lat != null && s.lng != null && map) {
+    map.flyTo([s.lat, s.lng], 12, { duration: 1.4 })
+  }
+
+  await loadPins()
+  updateMarkers()
 }
 
 function updateMarkers() {
@@ -313,8 +366,10 @@ onMounted(() => {
   geo.init()
   updateMarkers()
   updateUserMarker()
-  void loadPins().then(() => updateMarkers())
-  void loadCities()
+  void Promise.all([loadPins(), loadCities()]).then(() => {
+    updateMarkers()
+    void applyInitialSearch()
+  })
 
   const fix = () => map?.invalidateSize()
   const t1 = setTimeout(fix, 100)

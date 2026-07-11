@@ -177,6 +177,13 @@ export interface CitySuggestion {
   lng: number
 }
 
+export interface MapSearchPayload {
+  lat?: number
+  lng?: number
+  city?: string
+  query?: string
+}
+
 export interface OfferResponse {
   id: string
   producerName: string

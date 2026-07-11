@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   MapPin, Search, ChevronDown, Star, ArrowRight,
   Sprout, Building2, UserPlus, Map,
@@ -20,7 +20,10 @@ const searchLng = ref(106.82)
 const showLocationMenu = ref(false)
 const locationSearch = ref('')
 const locationLoading = ref(false)
+const selectedCityName = ref('')
 const cities = ref<CitySuggestion[]>([])
+const locationWrapRef = ref<HTMLElement | null>(null)
+let cityDebounce: ReturnType<typeof setTimeout> | null = null
 const loading = ref(true)
 const loadError = ref('')
 
@@ -60,15 +63,30 @@ async function refreshMapData() {
   }
 }
 
-function toggleLocationMenu() {
+function toggleLocationMenu(e: Event) {
+  e.stopPropagation()
   showLocationMenu.value = !showLocationMenu.value
   if (showLocationMenu.value && cities.value.length === 0) {
     void loadCities()
   }
 }
 
-function closeLocationMenu() {
-  window.setTimeout(() => { showLocationMenu.value = false }, 150)
+function onDocumentClick(e: MouseEvent) {
+  if (!showLocationMenu.value) return
+  const el = locationWrapRef.value
+  if (el && !el.contains(e.target as Node)) {
+    showLocationMenu.value = false
+  }
+}
+
+function goToMap() {
+  showLocationMenu.value = false
+  emit('navigate', 'map', {
+    lat: searchLat.value,
+    lng: searchLng.value,
+    city: selectedCityName.value || undefined,
+    query: searchQuery.value.trim() || undefined,
+  })
 }
 
 async function useMyLocation() {
@@ -80,6 +98,7 @@ async function useMyLocation() {
   if (ok) {
     searchLat.value = geo.lat.value
     searchLng.value = geo.lng.value
+    selectedCityName.value = ''
     locationQuery.value = geo.label.value
     await refreshMapData()
   } else {
@@ -92,11 +111,13 @@ async function selectCity(city: CitySuggestion) {
   locationSearch.value = ''
   searchLat.value = Number(city.lat)
   searchLng.value = Number(city.lng)
+  selectedCityName.value = city.name
   locationQuery.value = `${city.name}, ${city.province}`
   await refreshMapData()
 }
 
 onMounted(async () => {
+  document.addEventListener('click', onDocumentClick)
   geo.init()
   searchLat.value = geo.lat.value
   searchLng.value = geo.lng.value
@@ -121,6 +142,11 @@ onMounted(async () => {
   }
 })
 
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+  if (cityDebounce) clearTimeout(cityDebounce)
+})
+
 watch(geo.label, (label) => {
   if (geo.usingGps.value) {
     locationQuery.value = label
@@ -130,7 +156,9 @@ watch(geo.label, (label) => {
 })
 
 watch(locationSearch, (q) => {
-  if (showLocationMenu.value) void loadCities(q)
+  if (!showLocationMenu.value) return
+  if (cityDebounce) clearTimeout(cityDebounce)
+  cityDebounce = setTimeout(() => void loadCities(q), 300)
 })
 
 watch(
@@ -192,14 +220,13 @@ const hoveredAction = ref<number | null>(null)
         <div class="search-card">
           <div class="search-card__label">Komoditas atau lokasi</div>
           <div class="search-card__row">
-            <div class="search-card__location-wrap">
+            <div ref="locationWrapRef" class="search-card__location-wrap">
               <button
                 type="button"
                 class="search-card__location"
                 :class="{ 'search-card__location--open': showLocationMenu }"
                 :disabled="locationLoading"
                 @click="toggleLocationMenu"
-                @blur="closeLocationMenu"
               >
                 <MapPin :size="15" color="#E74C3C" />
                 <span class="search-card__location-label">{{ locationQuery }}</span>
@@ -248,9 +275,10 @@ const hoveredAction = ref<number | null>(null)
                 v-model="searchQuery"
                 class="search-card__input"
                 placeholder="Cari komoditas, produsen, koperasi..."
+                @keydown.enter.prevent="goToMap"
               />
             </div>
-            <button class="search-card__btn" @click="emit('navigate', 'map')">
+            <button class="search-card__btn" @click="goToMap">
               Jelajahi
             </button>
           </div>

@@ -15,6 +15,7 @@ import AddProductForm from '@/components/AddProductForm.vue'
 import EntityDetail from '@/components/EntityDetail.vue'
 import OfftakerDashboard from '@/components/OfftakerDashboard.vue'
 import { useGeolocation } from '@/composables/useGeolocation'
+import type { MapSearchPayload } from '@/api/types'
 
 const geo = useGeolocation()
 onMounted(() => geo.init())
@@ -58,10 +59,15 @@ const mobileNav = [
 
 const activeView = ref<View>('home')
 const entityData = ref<EntityData | null>(null)
+const mapSearch = ref<MapSearchPayload | null>(null)
 
 function navigate(view: string, data?: unknown) {
   activeView.value = view as View
-  if (data && typeof data === 'object') {
+  if (view === 'map') {
+    mapSearch.value = data && typeof data === 'object' ? (data as MapSearchPayload) : null
+    return
+  }
+  if (view === 'entity-detail' && data && typeof data === 'object') {
     entityData.value = data as EntityData
   }
 }
@@ -182,7 +188,7 @@ function isNavActive(navId: string) {
 
       <div class="flex flex-1 flex-col min-h-0 overflow-hidden">
         <LandingPage v-if="activeView === 'home'" @navigate="navigate" />
-        <MapView v-else-if="activeView === 'map'" @navigate="navigate" />
+        <MapView v-else-if="activeView === 'map'" :initial-search="mapSearch" @navigate="navigate" />
         <ProducerDashboard v-else-if="activeView === 'producer-dashboard'" @navigate="navigate" />
         <CoopDashboard v-else-if="activeView === 'coop-dashboard'" @navigate="navigate" />
         <OfftakerDashboard v-else-if="activeView === 'offtaker-dashboard'" @navigate="navigate" />
