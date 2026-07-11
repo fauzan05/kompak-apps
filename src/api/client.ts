@@ -92,6 +92,21 @@ export function fetchCoopDashboard(
   )
 }
 
+export function uploadProductPhoto(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return fetch(`${BASE}/uploads`, {
+    method: 'POST',
+    body: formData,
+  }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(err.error || `Upload gagal (${res.status})`)
+    }
+    return res.json() as Promise<{ url: string }>
+  })
+}
+
 export function submitProduct(payload: {
   namaKomoditas: string
   jumlah: number
@@ -103,6 +118,7 @@ export function submitProduct(payload: {
   entitasRef?: string
   koordinat?: string
   kodeWilayah?: string
+  fotoUrl?: string
 }) {
   return postJson<{ ok: boolean; entitasRef: string; penawaranRef: string }>('/products', payload)
 }

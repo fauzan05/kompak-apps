@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   MapPin, Search, ChevronDown, Star, ArrowRight,
   Sprout, Building2, UserPlus, Map,
-  Zap, Handshake, Truck,
+  Zap, Handshake, Truck, Navigation,
 } from 'lucide-vue-next'
-import { fetchCommodities, fetchMapPins, fetchStats } from '@/api/client'
-import type { KomoditasItem, LandingStat, ProducerCard } from '@/api/types'
+import { fetchCommodities, fetchCities, fetchMapPins, fetchStats } from '@/api/client'
+import type { CitySuggestion, KomoditasItem, LandingStat, ProducerCard } from '@/api/types'
 import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
@@ -15,6 +15,12 @@ const geo = useGeolocation()
 
 const searchQuery = ref('')
 const locationQuery = ref('Mencari lokasi…')
+const searchLat = ref(-6.2)
+const searchLng = ref(106.82)
+const showLocationMenu = ref(false)
+const locationSearch = ref('')
+const locationLoading = ref(false)
+const cities = ref<CitySuggestion[]>([])
 const loading = ref(true)
 const loadError = ref('')
 
@@ -29,16 +35,80 @@ const statsFallback = [
   { value: '—', label: 'Komoditas', sub: 'memuat…' },
 ]
 
+const filteredCities = computed(() => {
+  const q = locationSearch.value.trim().toLowerCase()
+  if (!q) return cities.value.slice(0, 8)
+  return cities.value.filter(
+    (c) => c.name.toLowerCase().includes(q) || c.province.toLowerCase().includes(q),
+  ).slice(0, 8)
+})
+
+async function loadCities(q = '') {
+  try {
+    cities.value = await fetchCities(q)
+  } catch {
+    cities.value = []
+  }
+}
+
+async function refreshMapData() {
+  try {
+    const mapData = await fetchMapPins(searchLat.value, searchLng.value)
+    producerCards.value = mapData.producerCards
+  } catch {
+    /* keep previous cards */
+  }
+}
+
+function toggleLocationMenu() {
+  showLocationMenu.value = !showLocationMenu.value
+  if (showLocationMenu.value && cities.value.length === 0) {
+    void loadCities()
+  }
+}
+
+function closeLocationMenu() {
+  window.setTimeout(() => { showLocationMenu.value = false }, 150)
+}
+
+async function useMyLocation() {
+  showLocationMenu.value = false
+  locationLoading.value = true
+  locationQuery.value = 'Mencari lokasi…'
+  const ok = await geo.requestLocation()
+  locationLoading.value = false
+  if (ok) {
+    searchLat.value = geo.lat.value
+    searchLng.value = geo.lng.value
+    locationQuery.value = geo.label.value
+    await refreshMapData()
+  } else {
+    locationQuery.value = geo.errorMessage.value || 'Lokasi default'
+  }
+}
+
+async function selectCity(city: CitySuggestion) {
+  showLocationMenu.value = false
+  locationSearch.value = ''
+  searchLat.value = Number(city.lat)
+  searchLng.value = Number(city.lng)
+  locationQuery.value = `${city.name}, ${city.province}`
+  await refreshMapData()
+}
+
 onMounted(async () => {
   geo.init()
+  searchLat.value = geo.lat.value
+  searchLng.value = geo.lng.value
   loading.value = true
   loadError.value = ''
   try {
     const [s, k, mapData] = await Promise.all([
       fetchStats(),
       fetchCommodities(),
-      fetchMapPins(geo.lat.value, geo.lng.value),
+      fetchMapPins(searchLat.value, searchLng.value),
     ])
+    void loadCities()
     stats.value = s
     komoditas.value = k
     producerCards.value = mapData.producerCards
@@ -52,19 +122,24 @@ onMounted(async () => {
 })
 
 watch(geo.label, (label) => {
-  locationQuery.value = label
+  if (geo.usingGps.value) {
+    locationQuery.value = label
+    searchLat.value = geo.lat.value
+    searchLng.value = geo.lng.value
+  }
+})
+
+watch(locationSearch, (q) => {
+  if (showLocationMenu.value) void loadCities(q)
 })
 
 watch(
   () => [geo.lat.value, geo.lng.value, geo.usingGps.value] as const,
-  async ([, , usingGps]) => {
+  async ([lat, lng, usingGps]) => {
     if (!usingGps) return
-    try {
-      const mapData = await fetchMapPins(geo.lat.value, geo.lng.value)
-      producerCards.value = mapData.producerCards
-    } catch {
-      /* keep previous cards */
-    }
+    searchLat.value = lat
+    searchLng.value = lng
+    await refreshMapData()
   },
 )
 
@@ -117,10 +192,55 @@ const hoveredAction = ref<number | null>(null)
         <div class="search-card">
           <div class="search-card__label">Komoditas atau lokasi</div>
           <div class="search-card__row">
-            <div class="search-card__location">
-              <MapPin :size="15" color="#E74C3C" />
-              <span>{{ locationQuery }}</span>
-              <ChevronDown :size="14" color="#9B9BAA" />
+            <div class="search-card__location-wrap">
+              <button
+                type="button"
+                class="search-card__location"
+                :class="{ 'search-card__location--open': showLocationMenu }"
+                :disabled="locationLoading"
+                @click="toggleLocationMenu"
+                @blur="closeLocationMenu"
+              >
+                <MapPin :size="15" color="#E74C3C" />
+                <span class="search-card__location-label">{{ locationQuery }}</span>
+                <ChevronDown :size="14" color="#9B9BAA" class="search-card__chevron" />
+              </button>
+              <div v-if="showLocationMenu" class="search-card__location-menu">
+                <button
+                  type="button"
+                  class="search-card__location-item search-card__location-item--gps"
+                  @mousedown.prevent="useMyLocation"
+                >
+                  <Navigation :size="15" color="#0F595E" />
+                  <span>Gunakan lokasi saya</span>
+                </button>
+                <div class="search-card__location-search">
+                  <Search :size="14" color="#9B9BAA" />
+                  <input
+                    v-model="locationSearch"
+                    type="text"
+                    placeholder="Cari kota…"
+                    class="search-card__location-search-input"
+                    @mousedown.stop
+                    @click.stop
+                  />
+                </div>
+                <p v-if="filteredCities.length === 0" class="search-card__location-empty">
+                  Kota tidak ditemukan
+                </p>
+                <button
+                  v-for="city in filteredCities"
+                  :key="`${city.name}-${city.province}`"
+                  type="button"
+                  class="search-card__location-item"
+                  @mousedown.prevent="selectCity(city)"
+                >
+                  <div>
+                    <div class="search-card__location-city">{{ city.name }}</div>
+                    <div class="search-card__location-province">{{ city.province }}</div>
+                  </div>
+                </button>
+              </div>
             </div>
             <div class="search-card__input-wrap">
               <Search :size="15" color="#9B9BAA" />
@@ -169,7 +289,17 @@ const hoveredAction = ref<number | null>(null)
       <h2 class="section__title">Pilih dari komoditas</h2>
       <p class="section__sub">Temukan produsen berdasarkan jenis komoditas</p>
 
-      <div class="circles-row">
+      <!-- Skeleton -->
+      <div v-if="loading" class="circles-row">
+        <div v-for="n in 6" :key="n" class="circle-item">
+          <div class="circle-item__img-wrap skeleton-circle" />
+          <div class="skeleton-text skeleton-text--sm" />
+          <div class="skeleton-text skeleton-text--xs" />
+        </div>
+      </div>
+
+      <!-- Loaded -->
+      <div v-else class="circles-row">
         <div
           v-for="(item, i) in komoditas"
           :key="item.name"
@@ -201,7 +331,28 @@ const hoveredAction = ref<number | null>(null)
         Temukan produsen terpercaya, favorit koperasi, dan penawaran terbaik di wilayah Anda.
       </p>
 
-      <div class="producer-grid">
+      <!-- Error banner -->
+      <div v-if="loadError" class="error-banner">
+        {{ loadError }} &mdash;
+        <button class="error-banner__retry" @click="emit('navigate', 'map')">
+          Lihat peta
+        </button>
+      </div>
+
+      <!-- Skeleton -->
+      <div v-else-if="loading" class="producer-grid">
+        <div v-for="n in 4" :key="n" class="producer-card producer-card--skeleton">
+          <div class="skeleton-img" />
+          <div class="producer-card__body">
+            <div class="skeleton-text" />
+            <div class="skeleton-text skeleton-text--sm" />
+            <div class="skeleton-text skeleton-text--xs" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Loaded -->
+      <div v-else class="producer-grid">
         <div
           v-for="(card, i) in producerCards"
           :key="card.id"
@@ -449,23 +600,126 @@ const hoveredAction = ref<number | null>(null)
   gap: 10px;
   align-items: stretch;
 }
+.search-card__location-wrap {
+  position: relative;
+  min-width: 170px;
+  flex-shrink: 0;
+}
 .search-card__location {
   display: flex;
   align-items: center;
   gap: 7px;
+  width: 100%;
   padding: 11px 13px;
   border: 1.5px solid #E8E8E8;
   border-radius: 10px;
   cursor: pointer;
-  min-width: 170px;
   background: #FAFAFA;
   font-size: 14px;
   font-weight: 500;
   color: #1A2B2C;
   transition: border-color 0.18s;
   user-select: none;
+  font-family: inherit;
+  text-align: left;
 }
-.search-card__location:hover { border-color: #0F595E; }
+.search-card__location:hover,
+.search-card__location--open {
+  border-color: #0F595E;
+}
+.search-card__location:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+.search-card__location-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-card__chevron {
+  flex-shrink: 0;
+  transition: transform 0.18s;
+}
+.search-card__location--open .search-card__chevron {
+  transform: rotate(180deg);
+}
+.search-card__location-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 260px;
+  background: #fff;
+  border: 1px solid #E8E8E8;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+  text-align: left;
+}
+.search-card__location-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid #F0F0F0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.search-card__location-item:hover {
+  background: #F5FAFA;
+}
+.search-card__location-item--gps {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F595E;
+}
+.search-card__location-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #F0F0F0;
+  background: #FAFAFA;
+  position: sticky;
+  top: 0;
+}
+.search-card__location-search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  width: 100%;
+  font-family: inherit;
+  color: #1A2B2C;
+}
+.search-card__location-search-input::placeholder {
+  color: #ADADB8;
+}
+.search-card__location-city {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1A2B2C;
+}
+.search-card__location-province {
+  font-size: 11px;
+  color: #9B9BAA;
+  margin-top: 2px;
+}
+.search-card__location-empty {
+  margin: 0;
+  padding: 14px;
+  font-size: 13px;
+  color: #9B9BAA;
+  text-align: center;
+}
 .search-card__input-wrap {
   flex: 1;
   display: flex;
@@ -909,7 +1163,7 @@ const hoveredAction = ref<number | null>(null)
   .hero { padding: 48px 20px 72px; }
   .hero__side { display: none; }
   .search-card__row { flex-direction: column; }
-  .search-card__location { min-width: unset; }
+  .search-card__location-wrap { min-width: unset; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .quick-grid { flex-direction: column; align-items: stretch; }
   .quick-card { max-width: unset; }
@@ -920,4 +1174,68 @@ const hoveredAction = ref<number | null>(null)
     grid-template-columns: 1fr;
   }
 }
+
+/* ─── SKELETON ───────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-circle,
+.skeleton-img,
+.skeleton-text {
+  background: linear-gradient(90deg, #E8E8E8 25%, #F2F2F2 50%, #E8E8E8 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 8px;
+}
+.skeleton-circle {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+}
+.skeleton-img {
+  width: 100%;
+  height: 156px;
+  border-radius: 0;
+}
+.skeleton-text {
+  height: 14px;
+  width: 80%;
+  margin-bottom: 8px;
+  border-radius: 6px;
+}
+.skeleton-text--sm {
+  width: 60%;
+  height: 12px;
+}
+.skeleton-text--xs {
+  width: 45%;
+  height: 11px;
+}
+
+/* ─── ERROR BANNER ───────────────────────────────────── */
+.error-banner {
+  background: #FEF2F2;
+  border: 1.5px solid #FECACA;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 14px;
+  color: #B91C1C;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.error-banner__retry {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F595E;
+  font-family: inherit;
+  text-decoration: underline;
+  padding: 0;
+}
+
 </style>

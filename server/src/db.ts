@@ -1,12 +1,12 @@
 import postgres from 'postgres'
 import { config } from 'dotenv'
-import { resolve } from 'path'
+import { join } from 'path'
+import { projectRoot } from './paths.js'
 
-config({ path: resolve(process.cwd(), '../.env') })
-config()
+config({ path: join(projectRoot, '.env') })
 
 const url = process.env.DATABASE_URL
-if (!url) throw new Error('DATABASE_URL tidak ditemukan')
+if (!url) throw new Error('DATABASE_URL tidak ditemukan — pastikan .env ada di root proyek')
 
 export const sql = postgres(url, { max: 10 })
 

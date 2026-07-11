@@ -20,6 +20,7 @@ CREATE TABLE penawaran_komoditas (
     jumlah          numeric,
     satuan          text DEFAULT 'kg',
     harga           numeric,
+    foto_url        text,
     status          text DEFAULT 'aktif',
     dibuat_pada     timestamp DEFAULT now(),
     diperbarui_pada timestamp DEFAULT now()

@@ -14,10 +14,11 @@ import {
   ChevronLeft,
   Sprout,
   Loader2,
+  X,
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
-import { DEMO_PRODUCER_ID, submitProduct } from '@/api/client'
+import { DEMO_PRODUCER_ID, submitProduct, uploadProductPhoto } from '@/api/client'
 import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string] }>()
@@ -47,6 +48,57 @@ const selectedLng = ref(106.8)
 const locationLoading = ref(false)
 const locationError = ref('')
 const gpsLoading = ref(false)
+
+const photoFile = ref<File | null>(null)
+const photoPreview = ref('')
+const photoUrl = ref('')
+const photoError = ref('')
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+const ALLOWED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+function clearPhotoPreview() {
+  if (photoPreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(photoPreview.value)
+  }
+  photoPreview.value = ''
+}
+
+function removePhoto() {
+  clearPhotoPreview()
+  photoFile.value = null
+  photoUrl.value = ''
+  photoError.value = ''
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+function openPhotoPicker() {
+  fileInputRef.value?.click()
+}
+
+function onPhotoSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  photoError.value = ''
+  if (!ALLOWED_PHOTO_TYPES.has(file.type)) {
+    photoError.value = 'Format harus JPEG, PNG, atau WebP'
+    input.value = ''
+    return
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    photoError.value = 'Ukuran file maksimal 5 MB'
+    input.value = ''
+    return
+  }
+
+  clearPhotoPreview()
+  photoFile.value = file
+  photoUrl.value = ''
+  photoPreview.value = URL.createObjectURL(file)
+}
 
 let map: L.Map | null = null
 let marker: L.Marker | null = null
@@ -176,6 +228,7 @@ watch(step, async (s) => {
 onUnmounted(() => {
   if (geocodeTimer) clearTimeout(geocodeTimer)
   if (invalidateTimer) clearTimeout(invalidateTimer)
+  clearPhotoPreview()
   map?.remove()
   map = null
   marker = null
@@ -224,7 +277,15 @@ const entityTypeOptions = [
 async function handleSubmit() {
   submitting.value = true
   submitError.value = ''
+  photoError.value = ''
   try {
+    let uploadedUrl = photoUrl.value
+    if (photoFile.value) {
+      const { url } = await uploadProductPhoto(photoFile.value)
+      uploadedUrl = url
+      photoUrl.value = url
+    }
+
     await submitProduct({
       namaKomoditas: commodityLabel.value,
       jumlah: Number(form.quantity) || 0,
@@ -235,6 +296,7 @@ async function handleSubmit() {
       telepon: form.phone,
       entitasRef: DEMO_PRODUCER_ID,
       koordinat: `${selectedLat.value.toFixed(4)}, ${selectedLng.value.toFixed(4)}`,
+      fotoUrl: uploadedUrl || undefined,
     })
     submitted.value = true
   } catch (e) {
@@ -629,54 +691,127 @@ const previewRows = computed(() => [
             Foto Produk
             <span :style="{ fontWeight: 400, color: 'var(--kompak-text-muted)' }">(opsional)</span>
           </div>
-          <div
-            :style="{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 'var(--space-md)',
-              padding: 'var(--space-2xl)',
-              border: '2px dashed var(--kompak-border-strong)',
-              borderRadius: 'var(--radius-lg)',
-              background: 'var(--kompak-card-bg)',
-              cursor: 'pointer',
-              textAlign: 'center',
-            }"
-          >
+          <div>
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="sr-only"
+              @change="onPhotoSelected"
+            />
             <div
+              v-if="!photoPreview"
+              role="button"
+              tabindex="0"
               :style="{
-                width: 48,
-                height: 48,
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--kompak-surface-white)',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: 'var(--shadow-card)',
+                gap: 'var(--space-md)',
+                padding: 'var(--space-2xl)',
+                border: '2px dashed var(--kompak-border-strong)',
+                borderRadius: 'var(--radius-lg)',
+                background: 'var(--kompak-card-bg)',
+                cursor: 'pointer',
+                textAlign: 'center',
+              }"
+              @click="openPhotoPicker"
+              @keydown.enter.prevent="openPhotoPicker"
+              @keydown.space.prevent="openPhotoPicker"
+            >
+              <div
+                :style="{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--kompak-surface-white)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: 'var(--shadow-card)',
+                }"
+              >
+                <Camera :size="24" color="var(--kompak-secondary)" />
+              </div>
+              <div>
+                <div
+                  :style="{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'var(--kompak-text-dark)',
+                  }"
+                >
+                  Unggah Foto Produk
+                </div>
+                <div
+                  :style="{
+                    fontSize: '12px',
+                    color: 'var(--kompak-text-muted)',
+                    marginTop: 2,
+                  }"
+                >
+                  JPEG, PNG, atau WebP · maks. 5 MB
+                </div>
+              </div>
+            </div>
+            <div
+              v-else
+              :style="{
+                position: 'relative',
+                borderRadius: 'var(--radius-lg)',
+                overflow: 'hidden',
+                border: '1px solid var(--kompak-border)',
               }"
             >
-              <Camera :size="24" color="var(--kompak-secondary)" />
-            </div>
-            <div>
+              <img
+                :src="photoPreview"
+                alt="Pratinjau foto produk"
+                :style="{
+                  width: '100%',
+                  maxHeight: '240px',
+                  objectFit: 'cover',
+                  display: 'block',
+                }"
+              />
               <div
                 :style="{
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'var(--kompak-text-dark)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 'var(--space-md) var(--space-lg)',
+                  background: 'var(--kompak-surface-white)',
+                  borderTop: '1px solid var(--kompak-border)',
                 }"
               >
-                Unggah Foto Produk
-              </div>
-              <div
-                :style="{
-                  fontSize: '12px',
-                  color: 'var(--kompak-text-muted)',
-                  marginTop: 2,
-                }"
-              >
-                Foto produk mempercepat proses verifikasi
+                <span :style="{ fontSize: '12px', color: 'var(--kompak-text-muted)' }">
+                  {{ photoFile?.name }}
+                </span>
+                <button
+                  type="button"
+                  :style="{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: 'var(--kompak-danger)',
+                  }"
+                  @click="removePhoto"
+                >
+                  <X :size="14" />
+                  Hapus
+                </button>
               </div>
             </div>
+            <p
+              v-if="photoError"
+              :style="{ fontSize: '12px', color: 'var(--kompak-danger)', marginTop: 'var(--space-sm)', marginBottom: 0 }"
+            >
+              {{ photoError }}
+            </p>
           </div>
         </div>
       </div>
@@ -758,6 +893,18 @@ const previewRows = computed(() => [
               </span>
             </div>
           </div>
+          <img
+            v-if="photoPreview"
+            :src="photoPreview"
+            alt="Foto produk"
+            :style="{
+              width: '100%',
+              maxHeight: '200px',
+              objectFit: 'cover',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--kompak-border)',
+            }"
+          />
           <div
             v-for="row in previewRows"
             :key="row.label"
@@ -846,6 +993,12 @@ const previewRows = computed(() => [
       }"
     >
       <ButtonGroup :align="step > 1 ? 'justify' : 'end'">
+        <p
+          v-if="submitError && step === 3"
+          :style="{ fontSize: '13px', color: 'var(--kompak-danger)', margin: 0, flex: 1 }"
+        >
+          {{ submitError }}
+        </p>
         <Button v-if="step > 1" variant="neutral" @click="step--">
           <template #iconStart>
             <ChevronLeft :size="16" />
@@ -903,5 +1056,17 @@ const previewRows = computed(() => [
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

@@ -15,6 +15,7 @@ productsRoute.post('/', async (c) => {
     telepon?: string
     kodeWilayah?: string
     koordinat?: string
+    fotoUrl?: string
   }>()
 
   if (!body.namaKomoditas || !body.jumlah) {
@@ -46,7 +47,7 @@ productsRoute.post('/', async (c) => {
 
   const penawaranRef = `PWN-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`
   await sql`
-    INSERT INTO penawaran_komoditas (penawaran_ref, entitas_ref, nama_komoditas, jumlah, satuan, harga, status)
+    INSERT INTO penawaran_komoditas (penawaran_ref, entitas_ref, nama_komoditas, jumlah, satuan, harga, foto_url, status)
     VALUES (
       ${penawaranRef},
       ${entitasRef},
@@ -54,6 +55,7 @@ productsRoute.post('/', async (c) => {
       ${body.jumlah},
       ${body.satuan || 'kg'},
       ${body.harga || 15000},
+      ${body.fotoUrl || null},
       'aktif'
     )
   `
