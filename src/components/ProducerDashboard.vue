@@ -8,6 +8,7 @@ import {
 import { DEMO_PRODUCER_ID, fetchProducerDashboard } from '@/api/client'
 import type { ProducerDashboardData } from '@/api/types'
 import OfferFormModal, { type OfferFormContext } from '@/components/OfferFormModal.vue'
+import ResultModal from '@/components/ResultModal.vue'
 
 const emit = defineEmits<{ navigate: [view: string, data?: unknown] }>()
 
@@ -22,7 +23,17 @@ const transactions = ref<ProducerDashboardData['transactions']>([])
 
 const offerOpen = ref(false)
 const offerContext = ref<OfferFormContext | null>(null)
-const offerToast = ref('')
+const resultOpen = ref(false)
+const resultVariant = ref<'success' | 'error'>('success')
+const resultTitle = ref('')
+const resultMessage = ref('')
+
+function showResult(variant: 'success' | 'error', title: string, message: string) {
+  resultVariant.value = variant
+  resultTitle.value = title
+  resultMessage.value = message
+  resultOpen.value = true
+}
 
 function openOfferForRec(rec: ProducerDashboardData['recommendations'][number]) {
   const qtyMatch = rec.reason.match(/Membutuhkan (\d+)/)
@@ -40,8 +51,15 @@ function openOfferForRec(rec: ProducerDashboardData['recommendations'][number]) 
 }
 
 function onOfferSuccess() {
-  offerToast.value = 'Penawaran berhasil dikirim ke koperasi.'
-  window.setTimeout(() => { offerToast.value = '' }, 5000)
+  showResult(
+    'success',
+    'Penawaran Berhasil',
+    'Penawaran berhasil dikirim ke koperasi.',
+  )
+}
+
+function onOfferError(message: string) {
+  showResult('error', 'Penawaran Gagal', message)
 }
 
 onMounted(async () => {
@@ -173,8 +191,6 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
           <span :style="{ fontSize: '12px', color: 'var(--kompak-text-light)' }">{{ m.hint }}</span>
         </div>
       </div>
-
-      <div v-if="offerToast" class="offer-toast">{{ offerToast }}</div>
 
       <div>
         <div
@@ -528,19 +544,19 @@ const txStatus: Record<string, { label: string; color: string; bg: string }> = {
       :context="offerContext"
       @close="offerOpen = false"
       @success="onOfferSuccess"
+      @error="onOfferError"
+    />
+    <ResultModal
+      :open="resultOpen"
+      :variant="resultVariant"
+      :title="resultTitle"
+      :message="resultMessage"
+      @close="resultOpen = false"
     />
   </div>
 </template>
 
 <style>
-.offer-toast {
-  padding: var(--space-md) var(--space-lg);
-  border-radius: var(--radius-md);
-  background: var(--kompak-verified-bg);
-  color: var(--kompak-verified);
-  font-size: 13px;
-  font-weight: 600;
-}
 @media (max-width: 760px) {
   .metric-row { grid-template-columns: 1fr !important; }
   .two-col { grid-template-columns: 1fr !important; }

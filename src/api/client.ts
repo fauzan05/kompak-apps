@@ -101,6 +101,8 @@ export function submitProduct(payload: {
   tipeEntitas?: 'produsen' | 'komunitas'
   telepon?: string
   entitasRef?: string
+  koordinat?: string
+  kodeWilayah?: string
 }) {
   return postJson<{ ok: boolean; entitasRef: string; penawaranRef: string }>('/products', payload)
 }

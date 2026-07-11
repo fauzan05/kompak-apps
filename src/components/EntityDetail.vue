@@ -6,6 +6,7 @@ import { Button } from '@/components/ui'
 import { DEMO_COOP_ID, DEMO_PRODUCER_ID, fetchEntity } from '@/api/client'
 import type { EntityDetailData } from '@/api/types'
 import OfferFormModal, { type OfferFormContext } from '@/components/OfferFormModal.vue'
+import ResultModal from '@/components/ResultModal.vue'
 import {
   Sprout, Store, Users, MapPin, ShieldCheck, AlertCircle, Phone, ChevronLeft,
   Handshake, Zap, TrendingUp, Star, Clock, Package, MessageCircle, Calendar, Leaf,
@@ -64,7 +65,17 @@ const loading = ref(false)
 const loadError = ref('')
 const offerOpen = ref(false)
 const offerContext = ref<OfferFormContext | null>(null)
-const offerToast = ref('')
+const resultOpen = ref(false)
+const resultVariant = ref<'success' | 'error'>('success')
+const resultTitle = ref('')
+const resultMessage = ref('')
+
+function showResult(variant: 'success' | 'error', title: string, message: string) {
+  resultVariant.value = variant
+  resultTitle.value = title
+  resultMessage.value = message
+  resultOpen.value = true
+}
 
 interface ProductItem {
   name: string
@@ -117,10 +128,17 @@ function openOffer(product?: ProductItem) {
 }
 
 function onOfferSuccess() {
-  offerToast.value = isKoperasi.value
-    ? 'Penawaran pasokan berhasil dikirim ke koperasi.'
-    : 'Tawaran pembelian berhasil dikirim ke produsen.'
-  window.setTimeout(() => { offerToast.value = '' }, 5000)
+  showResult(
+    'success',
+    'Penawaran Berhasil',
+    isKoperasi.value
+      ? 'Penawaran pasokan berhasil dikirim ke koperasi.'
+      : 'Tawaran pembelian berhasil dikirim ke produsen.',
+  )
+}
+
+function onOfferError(message: string) {
+  showResult('error', 'Penawaran Gagal', message)
 }
 
 async function loadDetail() {
@@ -359,8 +377,6 @@ function onGalleryLeave(e: Event) {
       </div>
     </div>
 
-    <div v-if="offerToast" class="offer-toast">{{ offerToast }}</div>
-
     <!-- BODY GRID -->
     <div class="detail-grid" :style="{ maxWidth: '1100px', margin: '0 auto', padding: 'var(--space-2xl)', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 'var(--space-2xl)', alignItems: 'start' }">
       <!-- MAIN COLUMN -->
@@ -536,19 +552,19 @@ function onGalleryLeave(e: Event) {
       :context="offerContext"
       @close="offerOpen = false"
       @success="onOfferSuccess"
+      @error="onOfferError"
+    />
+    <ResultModal
+      :open="resultOpen"
+      :variant="resultVariant"
+      :title="resultTitle"
+      :message="resultMessage"
+      @close="resultOpen = false"
     />
   </div>
 </template>
 
 <style scoped>
-.offer-toast {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: var(--space-md) var(--space-2xl);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--kompak-verified);
-}
 @media (max-width: 900px) {
   .detail-grid {
     grid-template-columns: 1fr !important;

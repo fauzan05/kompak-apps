@@ -24,6 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   success: []
+  error: [message: string]
 }>()
 
 const unitOptions = [
@@ -99,7 +100,9 @@ async function handleSubmit() {
     emit('success')
     emit('close')
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Gagal mengirim penawaran'
+    const message = e instanceof Error ? e.message : 'Gagal mengirim penawaran'
+    emit('error', message)
+    emit('close')
   } finally {
     submitting.value = false
   }

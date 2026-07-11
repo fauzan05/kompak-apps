@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { Button, ButtonGroup, InputField, TextareaField, SelectField } from '@/components/ui'
 import {
   Check,
@@ -11,12 +13,173 @@ import {
   ChevronRight,
   ChevronLeft,
   Sprout,
+  Loader2,
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
 import { DEMO_PRODUCER_ID, submitProduct } from '@/api/client'
+import { useGeolocation } from '@/composables/useGeolocation'
 
 const emit = defineEmits<{ navigate: [view: string] }>()
+
+const step = ref(1)
+const submitted = ref(false)
+const submitting = ref(false)
+const submitError = ref('')
+
+const form = reactive({
+  name: '',
+  phone: '',
+  entityType: 'individu',
+  location: '',
+  commodity: '',
+  quantity: '',
+  unit: 'kg',
+  period: 'bulan',
+  price: '',
+  description: '',
+})
+
+const geo = useGeolocation()
+const mapEl = ref<HTMLDivElement | null>(null)
+const selectedLat = ref(-6.6)
+const selectedLng = ref(106.8)
+const locationLoading = ref(false)
+const locationError = ref('')
+const gpsLoading = ref(false)
+
+let map: L.Map | null = null
+let marker: L.Marker | null = null
+let geocodeTimer: ReturnType<typeof setTimeout> | null = null
+let invalidateTimer: ReturnType<typeof setTimeout> | null = null
+
+const markerIcon = L.divIcon({
+  className: 'kompak-picker-marker',
+  iconSize: [28, 36],
+  iconAnchor: [14, 36],
+  html: `<div style="display:flex;flex-direction:column;align-items:center;">
+    <div style="width:26px;height:26px;border-radius:50%;background:#C48A2A;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);"></div>
+    <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid #C48A2A;margin-top:-1px;"></div>
+  </div>`,
+})
+
+function scheduleGeocode(lat: number, lng: number) {
+  if (geocodeTimer) clearTimeout(geocodeTimer)
+  geocodeTimer = setTimeout(() => reverseGeocode(lat, lng), 600)
+}
+
+async function reverseGeocode(lat: number, lng: number) {
+  locationLoading.value = true
+  locationError.value = ''
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=id&zoom=16`,
+    )
+    if (!res.ok) throw new Error('Gagal membaca alamat')
+    const data = await res.json() as {
+      display_name?: string
+      address?: Record<string, string>
+    }
+    const addr = data.address
+    if (addr) {
+      const parts = [
+        addr.village || addr.suburb || addr.neighbourhood || addr.hamlet,
+        addr.city_district || addr.county || addr.municipality,
+        addr.state,
+      ].filter(Boolean)
+      form.location = parts.length ? parts.join(', ') : (data.display_name?.split(',').slice(0, 3).join(', ') || '')
+    } else {
+      form.location = data.display_name?.split(',').slice(0, 3).join(', ') || `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    }
+  } catch {
+    form.location = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+  } finally {
+    locationLoading.value = false
+  }
+}
+
+function updateMarkerPosition(lat: number, lng: number, fly = false) {
+  selectedLat.value = lat
+  selectedLng.value = lng
+  marker?.setLatLng([lat, lng])
+  if (fly && map) map.flyTo([lat, lng], 15, { duration: 0.8 })
+  scheduleGeocode(lat, lng)
+}
+
+function initMap() {
+  if (!mapEl.value || map) return
+  map = L.map(mapEl.value, {
+    center: [selectedLat.value, selectedLng.value],
+    zoom: 14,
+    scrollWheelZoom: true,
+    zoomControl: true,
+  })
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  }).addTo(map)
+
+  marker = L.marker([selectedLat.value, selectedLng.value], {
+    draggable: true,
+    icon: markerIcon,
+  }).addTo(map)
+
+  marker.on('dragend', () => {
+    const pos = marker!.getLatLng()
+    updateMarkerPosition(pos.lat, pos.lng)
+  })
+
+  map.on('click', (e) => {
+    updateMarkerPosition(e.latlng.lat, e.latlng.lng)
+  })
+
+  invalidateTimer = setTimeout(() => map?.invalidateSize(), 250)
+}
+
+async function useGps() {
+  gpsLoading.value = true
+  locationError.value = ''
+  geo.init()
+  const ok = await geo.requestLocation()
+  gpsLoading.value = false
+  if (ok) {
+    updateMarkerPosition(geo.lat.value, geo.lng.value, true)
+  } else {
+    locationError.value = geo.errorMessage.value || 'Gagal mendapatkan lokasi GPS'
+  }
+}
+
+onMounted(async () => {
+  geo.init()
+  if (geo.usingGps.value) {
+    selectedLat.value = geo.lat.value
+    selectedLng.value = geo.lng.value
+  }
+  await nextTick()
+  if (step.value === 1) {
+    initMap()
+    scheduleGeocode(selectedLat.value, selectedLng.value)
+  }
+})
+
+watch(step, async (s) => {
+  if (s === 1) {
+    await nextTick()
+    initMap()
+    invalidateTimer = setTimeout(() => {
+      map?.invalidateSize()
+      map?.setView([selectedLat.value, selectedLng.value], map.getZoom())
+    }, 200)
+  }
+})
+
+onUnmounted(() => {
+  if (geocodeTimer) clearTimeout(geocodeTimer)
+  if (invalidateTimer) clearTimeout(invalidateTimer)
+  map?.remove()
+  map = null
+  marker = null
+})
 
 const steps: { id: number; label: string; icon: Component }[] = [
   { id: 1, label: 'Data Diri', icon: User },
@@ -58,11 +221,6 @@ const entityTypeOptions = [
   { value: 'komunitas', label: 'Komunitas RT/RW/Kelurahan' },
 ]
 
-const step = ref(1)
-const submitted = ref(false)
-const submitting = ref(false)
-const submitError = ref('')
-
 async function handleSubmit() {
   submitting.value = true
   submitError.value = ''
@@ -76,6 +234,7 @@ async function handleSubmit() {
       tipeEntitas: form.entityType === 'komunitas' ? 'komunitas' : 'produsen',
       telepon: form.phone,
       entitasRef: DEMO_PRODUCER_ID,
+      koordinat: `${selectedLat.value.toFixed(4)}, ${selectedLng.value.toFixed(4)}`,
     })
     submitted.value = true
   } catch (e) {
@@ -84,19 +243,6 @@ async function handleSubmit() {
     submitting.value = false
   }
 }
-
-const form = reactive({
-  name: '',
-  phone: '',
-  entityType: 'individu',
-  location: '',
-  commodity: '',
-  quantity: '',
-  unit: 'kg',
-  period: 'bulan',
-  price: '',
-  description: '',
-})
 
 const commodityLabel = computed(
   () => commodityOptions.find((o) => o.value === form.commodity)?.label || form.commodity,
@@ -116,7 +262,7 @@ const previewRows = computed(() => [
   },
   { label: 'Harga', value: form.price ? `Rp ${form.price}/kg` : 'Belum ditentukan' },
   { label: 'Kontak', value: form.phone || '-' },
-  { label: 'Lokasi', value: form.location || 'Desa Ciawi, Kab. Bogor' },
+  { label: 'Lokasi', value: form.location || 'Belum dipilih di peta' },
 ])
 </script>
 
@@ -355,56 +501,31 @@ const previewRows = computed(() => [
               overflow: 'hidden',
             }"
           >
-            <div
-              :style="{
-                height: '160px',
-                background: 'linear-gradient(160deg, #c8d8b0 0%, #b8cc98 60%, #98b068 100%)',
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }"
-            >
-              <div :style="{ position: 'relative' }">
-                <div
-                  :style="{
-                    width: 24,
-                    height: 24,
-                    borderRadius: '50%',
-                    background: 'var(--kompak-accent)',
-                    border: '3px solid #fff',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                  }"
-                />
-                <div
-                  :style="{
-                    width: 0,
-                    height: 0,
-                    borderLeft: '6px solid transparent',
-                    borderRight: '6px solid transparent',
-                    borderTop: '10px solid var(--kompak-accent)',
-                    margin: '0 auto',
-                    marginTop: '-2px',
-                  }"
-                />
-              </div>
+            <div :style="{ position: 'relative' }">
+              <div ref="mapEl" class="location-map" />
               <button
+                type="button"
+                :disabled="gpsLoading"
                 :style="{
                   position: 'absolute',
                   bottom: 'var(--space-md)',
                   right: 'var(--space-md)',
+                  zIndex: 500,
                   background: 'var(--kompak-surface-white)',
                   border: 'none',
                   borderRadius: 'var(--radius-md)',
                   padding: '6px 10px',
-                  cursor: 'pointer',
+                  cursor: gpsLoading ? 'wait' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
                   boxShadow: 'var(--shadow-card)',
+                  opacity: gpsLoading ? 0.8 : 1,
                 }"
+                @click="useGps"
               >
-                <Navigation :size="12" color="var(--kompak-primary)" />
+                <Loader2 v-if="gpsLoading" :size="12" color="var(--kompak-primary)" class="spin" />
+                <Navigation v-else :size="12" color="var(--kompak-primary)" />
                 <span
                   :style="{
                     fontSize: '12px',
@@ -412,22 +533,34 @@ const previewRows = computed(() => [
                     fontWeight: 600,
                   }"
                 >
-                  Gunakan GPS
+                  {{ gpsLoading ? 'Mencari…' : 'Gunakan GPS' }}
                 </span>
               </button>
             </div>
             <div
               :style="{
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: 'var(--space-md)',
                 padding: 'var(--space-lg)',
+                borderTop: '1px solid var(--kompak-border)',
+                background: 'var(--kompak-surface-white)',
               }"
             >
-              <MapPin :size="16" color="var(--kompak-accent)" />
-              <span :style="{ fontSize: '13px', color: 'var(--kompak-text-muted)' }">
-                {{ form.location || 'Ketuk peta untuk memilih lokasi produksi' }}
-              </span>
+              <MapPin :size="16" color="var(--kompak-accent)" :style="{ flexShrink: 0, marginTop: 2 }" />
+              <div>
+                <div :style="{ fontSize: '13px', color: 'var(--kompak-text-dark)', fontWeight: 500, lineHeight: 1.4 }">
+                  <template v-if="locationLoading">Mencari nama wilayah…</template>
+                  <template v-else-if="form.location">{{ form.location }}</template>
+                  <template v-else>Ketuk peta atau geser pin untuk memilih lokasi produksi</template>
+                </div>
+                <div :style="{ fontSize: '11px', color: 'var(--kompak-text-muted)', marginTop: 4 }">
+                  {{ selectedLat.toFixed(5) }}, {{ selectedLng.toFixed(5) }} · geser pin untuk presisi
+                </div>
+                <div v-if="locationError" :style="{ fontSize: '12px', color: 'var(--kompak-danger)', marginTop: 6 }">
+                  {{ locationError }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -741,3 +874,34 @@ const previewRows = computed(() => [
     </div>
   </div>
 </template>
+
+<style scoped>
+.location-map {
+  height: 240px;
+  width: 100%;
+  background: var(--kompak-card-bg);
+  z-index: 0;
+}
+
+.location-map :deep(.leaflet-container) {
+  font-family: var(--font-body);
+}
+
+.location-map :deep(.leaflet-control-zoom) {
+  border: 1px solid var(--kompak-border);
+  box-shadow: var(--shadow-card);
+}
+
+.location-map :deep(.leaflet-control-attribution) {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+</style>
